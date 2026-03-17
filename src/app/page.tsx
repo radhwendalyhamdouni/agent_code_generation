@@ -139,9 +139,19 @@ export default function AlMarjaaAgentPage() {
   const loadSettings = async () => {
     try {
       const response = await fetch('/api/settings');
-      const data = await response.json();
-      if (data.success) {
-        setSettings({ ...DEFAULT_SETTINGS, ...data.settings });
+      if (!response.ok) {
+        console.warn('Settings API returned:', response.status);
+        return;
+      }
+      const text = await response.text();
+      if (!text) return;
+      try {
+        const data = JSON.parse(text);
+        if (data.success) {
+          setSettings({ ...DEFAULT_SETTINGS, ...data.settings });
+        }
+      } catch (parseError) {
+        console.warn('Settings parse error');
       }
     } catch (error) {
       console.error('Error loading settings:', error);
@@ -169,15 +179,38 @@ export default function AlMarjaaAgentPage() {
   const loadFiles = async () => {
     try {
       const response = await fetch('/api/files');
-      const data = await response.json();
-      if (data.success) {
-        setFiles(data.files || []);
-      } else {
-        // Demo files
+      if (!response.ok) {
+        console.warn('Files API returned:', response.status);
         setFiles([
           { name: 'main.mrj', path: 'main.mrj', type: 'file' },
           { name: 'config.mrj', path: 'config.mrj', type: 'file' },
-          { name: 'utils.mrj', path: 'utils.mrj', type: 'file' },
+        ]);
+        return;
+      }
+      const text = await response.text();
+      if (!text) {
+        setFiles([
+          { name: 'main.mrj', path: 'main.mrj', type: 'file' },
+          { name: 'config.mrj', path: 'config.mrj', type: 'file' },
+        ]);
+        return;
+      }
+      try {
+        const data = JSON.parse(text);
+        if (data.success) {
+          setFiles(data.files || []);
+        } else {
+          setFiles([
+            { name: 'main.mrj', path: 'main.mrj', type: 'file' },
+            { name: 'config.mrj', path: 'config.mrj', type: 'file' },
+            { name: 'utils.mrj', path: 'utils.mrj', type: 'file' },
+          ]);
+        }
+      } catch (parseError) {
+        console.warn('Files parse error');
+        setFiles([
+          { name: 'main.mrj', path: 'main.mrj', type: 'file' },
+          { name: 'config.mrj', path: 'config.mrj', type: 'file' },
         ]);
       }
     } catch (error) {
@@ -212,19 +245,33 @@ export default function AlMarjaaAgentPage() {
         body: JSON.stringify({ message: currentInput })
       });
 
-      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
+      }
+      
+      const text = await response.text();
+      let content = 'تم استلام طلبك. كيف يمكنني مساعدتك أكثر؟';
+      
+      if (text) {
+        try {
+          const data = JSON.parse(text);
+          content = data.content || content;
+        } catch {
+          // Use default content
+        }
+      }
 
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: data.content || 'تم استلام طلبك. كيف يمكنني مساعدتك أكثر؟',
+        content: content,
         timestamp: new Date()
       };
 
       setMessages(prev => [...prev, assistantMessage]);
 
       // Extract code and update editor
-      const codeMatch = data.content?.match(/```almarjaa\n([\s\S]*?)```/);
+      const codeMatch = content?.match(/```almarjaa\n([\s\S]*?)```/);
       if (codeMatch) {
         setCode(codeMatch[1]);
       }
@@ -248,14 +295,27 @@ export default function AlMarjaaAgentPage() {
     setOutput('جاري التنفيذ...');
 
     try {
-      const response = await fetch('/api/agent/execute?XTransformPort=3030', {
+      const response = await fetch('/api/agent/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code })
       });
 
-      const data = await response.json();
-      setOutput(data.output || 'تم التنفيذ بنجاح');
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
+      }
+      
+      const text = await response.text();
+      if (text) {
+        try {
+          const data = JSON.parse(text);
+          setOutput(data.output || 'تم التنفيذ بنجاح');
+        } catch {
+          setOutput(text);
+        }
+      } else {
+        setOutput('تم التنفيذ بنجاح');
+      }
     } catch (error) {
       console.error('Error executing code:', error);
       // Simulate execution for demo
@@ -282,14 +342,26 @@ export default function AlMarjaaAgentPage() {
     setTerminalInput('');
 
     try {
-      const response = await fetch('/api/agent/execute?XTransformPort=3030', {
+      const response = await fetch('/api/agent/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ command })
       });
 
-      const data = await response.json();
-      setTerminalHistory(prev => [...prev, data.output || 'تم التنفيذ']);
+      if (!response.ok) {
+        setTerminalHistory(prev => [...prev, `Error: ${response.status}`]);
+        return;
+      }
+      
+      const text = await response.text();
+      if (text) {
+        try {
+          const data = JSON.parse(text);
+          setTerminalHistory(prev => [...prev, data.output || 'تم التنفيذ']);
+        } catch {
+          setTerminalHistory(prev => [...prev, text]);
+        }
+      }
     } catch (error) {
       setTerminalHistory(prev => [...prev, `> ${command}`]);
       setTerminalHistory(prev => [...prev, 'Command executed (simulation mode)']);
