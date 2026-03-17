@@ -474,3 +474,11 @@ Read more: https://nextjs.org/docs/app/api-reference/config/next-config-js/allow
  POST /api/agent/chat 200 in 15.0s (compile: 38ms, render: 15.0s)
 ✓ Compiled in 234ms
 ✓ Compiled in 260ms
+ POST /api/agent/task 200 in 36.1s (compile: 61ms, render: 36.0s)
+ POST /api/agent/task 200 in 37.6s (compile: 2ms, render: 37.6s)
+✓ Compiled in 169ms
+ POST /api/agent/task 200 in 18.3s (compile: 2ms, render: 18.3s)
+✓ Compiled in 227ms
+✓ Compiled in 247ms
+error: script "dev" was terminated by signal SIGTERM (Polite quit request)
+[?25h

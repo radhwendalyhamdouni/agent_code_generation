@@ -1,6 +1,7 @@
 /**
  * وكيل المرجع الذكي - Zustand Store
  * Comprehensive state management for the AI Agent Interface
+ * مع تحديثات الوقت الفعلي وإدارة المهام
  */
 
 import { create } from 'zustand';
@@ -14,6 +15,19 @@ export interface Message {
   timestamp: Date;
   isStreaming?: boolean;
   codeBlocks?: CodeBlock[];
+  steps?: ExecutionStep[];
+}
+
+export interface ExecutionStep {
+  id: string;
+  type: 'think' | 'create' | 'execute' | 'fix' | 'success' | 'error' | 'info';
+  title: string;
+  content: string;
+  code?: string;
+  filePath?: string;
+  output?: string;
+  error?: string;
+  timestamp: Date;
 }
 
 export interface CodeBlock {
@@ -45,14 +59,14 @@ export interface Conversation {
   updatedAt: Date;
 }
 
-export interface FileItem {
+export interface ProjectFile {
   name: string;
   path: string;
   type: 'file' | 'directory';
   content?: string;
   language?: string;
   size?: number;
-  children?: FileItem[];
+  children?: ProjectFile[];
   isOpen?: boolean;
 }
 
@@ -86,6 +100,11 @@ export interface GitHubConfig {
   username?: string;
 }
 
+// Event callbacks for real-time updates
+type TaskCallback = (task: Task) => void;
+type FileCallback = (file: ProjectFile) => void;
+type MessageCallback = (message: Message) => void;
+
 export interface AgentState {
   // Theme
   theme: 'dark' | 'light';
@@ -112,30 +131,34 @@ export interface AgentState {
   // Conversations
   conversations: Conversation[];
   currentConversationId: string | null;
-  createConversation: () => void;
+  createConversation: () => Conversation;
   deleteConversation: (id: string) => void;
   selectConversation: (id: string) => void;
   getCurrentConversation: () => Conversation | null;
 
   // Messages
-  addMessage: (message: Omit<Message, 'id' | 'timestamp'>) => void;
+  messages: Message[];
+  addMessage: (message: Omit<Message, 'id' | 'timestamp'>) => Message;
   updateMessage: (id: string, updates: Partial<Message>) => void;
   clearMessages: () => void;
+  setMessages: (messages: Message[]) => void;
 
   // Tasks
   tasks: Task[];
-  addTask: (task: Omit<Task, 'id' | 'createdAt' | 'updatedAt'>) => void;
+  addTask: (task: Omit<Task, 'id' | 'createdAt' | 'updatedAt'>) => Task;
   updateTask: (id: string, updates: Partial<Task>) => void;
   deleteTask: (id: string) => void;
   clearTasks: () => void;
+  getTaskById: (id: string) => Task | undefined;
 
   // Files
-  files: FileItem[];
-  setFiles: (files: FileItem[]) => void;
+  files: ProjectFile[];
+  setFiles: (files: ProjectFile[]) => void;
   selectedFile: string | null;
   setSelectedFile: (path: string | null) => void;
   updateFileContent: (path: string, content: string) => void;
   toggleFolder: (path: string) => void;
+  addFile: (file: ProjectFile) => void;
 
   // Terminal
   terminalLines: TerminalLine[];
@@ -163,6 +186,10 @@ export interface AgentState {
   setIsAgentThinking: (thinking: boolean) => void;
   agentError: string | null;
   setAgentError: (error: string | null) => void;
+  
+  // Current execution
+  currentTaskId: string | null;
+  setCurrentTaskId: (id: string | null) => void;
 }
 
 // Helper function to generate unique IDs
@@ -208,19 +235,29 @@ export const useAgentStore = create<AgentState>()(
         set((state) => ({
           conversations: [newConversation, ...state.conversations],
           currentConversationId: newConversation.id,
+          messages: [],
         }));
+        return newConversation;
       },
       deleteConversation: (id) => set((state) => ({
         conversations: state.conversations.filter((c) => c.id !== id),
         currentConversationId: state.currentConversationId === id ? null : state.currentConversationId,
       })),
-      selectConversation: (id) => set({ currentConversationId: id }),
+      selectConversation: (id) => {
+        const state = get();
+        const conv = state.conversations.find(c => c.id === id);
+        set({ 
+          currentConversationId: id,
+          messages: conv?.messages || []
+        });
+      },
       getCurrentConversation: () => {
         const state = get();
         return state.conversations.find((c) => c.id === state.currentConversationId) || null;
       },
 
       // Messages
+      messages: [],
       addMessage: (message) => {
         const newMessage: Message = {
           ...message,
@@ -228,11 +265,14 @@ export const useAgentStore = create<AgentState>()(
           timestamp: new Date(),
         };
         set((state) => {
+          const updatedMessages = [...state.messages, newMessage];
+          
+          // Update conversation too
           const conversations = state.conversations.map((c) => {
             if (c.id === state.currentConversationId) {
               return {
                 ...c,
-                messages: [...c.messages, newMessage],
+                messages: updatedMessages,
                 updatedAt: new Date(),
                 title: c.messages.length === 0 && message.role === 'user' 
                   ? message.content.substring(0, 30) + (message.content.length > 30 ? '...' : '')
@@ -241,23 +281,21 @@ export const useAgentStore = create<AgentState>()(
             }
             return c;
           });
-          return { conversations };
+          
+          return { messages: updatedMessages, conversations };
         });
+        return newMessage;
       },
-      updateMessage: (id, updates) => set((state) => ({
-        conversations: state.conversations.map((c) => ({
+      updateMessage: (id, updates) => set((state) => {
+        const messages = state.messages.map((m) => (m.id === id ? { ...m, ...updates } : m));
+        const conversations = state.conversations.map((c) => ({
           ...c,
           messages: c.messages.map((m) => (m.id === id ? { ...m, ...updates } : m)),
-        })),
-      })),
-      clearMessages: () => set((state) => ({
-        conversations: state.conversations.map((c) => {
-          if (c.id === state.currentConversationId) {
-            return { ...c, messages: [], updatedAt: new Date() };
-          }
-          return c;
-        }),
-      })),
+        }));
+        return { messages, conversations };
+      }),
+      clearMessages: () => set({ messages: [] }),
+      setMessages: (messages) => set({ messages }),
 
       // Tasks
       tasks: [],
@@ -269,6 +307,7 @@ export const useAgentStore = create<AgentState>()(
           updatedAt: new Date(),
         };
         set((state) => ({ tasks: [...state.tasks, newTask] }));
+        return newTask;
       },
       updateTask: (id, updates) => set((state) => ({
         tasks: state.tasks.map((t) => 
@@ -279,6 +318,7 @@ export const useAgentStore = create<AgentState>()(
         tasks: state.tasks.filter((t) => t.id !== id),
       })),
       clearTasks: () => set({ tasks: [] }),
+      getTaskById: (id) => get().tasks.find(t => t.id === id),
 
       // Files
       files: [],
@@ -290,6 +330,9 @@ export const useAgentStore = create<AgentState>()(
       })),
       toggleFolder: (path) => set((state) => ({
         files: toggleFolderInTree(state.files, path),
+      })),
+      addFile: (file) => set((state) => ({
+        files: [...state.files, file]
       })),
 
       // Terminal
@@ -371,7 +414,6 @@ export const useAgentStore = create<AgentState>()(
       connectGitHub: async () => {
         const state = get();
         try {
-          // Simulate GitHub connection
           if (state.github.token && state.github.repoUrl) {
             set({
               github: {
@@ -401,6 +443,10 @@ export const useAgentStore = create<AgentState>()(
       setIsAgentThinking: (thinking) => set({ isAgentThinking: thinking }),
       agentError: null,
       setAgentError: (error) => set({ agentError: error }),
+      
+      // Current execution
+      currentTaskId: null,
+      setCurrentTaskId: (id) => set({ currentTaskId: id }),
     }),
     {
       name: 'agent-storage',
@@ -418,7 +464,7 @@ export const useAgentStore = create<AgentState>()(
 );
 
 // Helper functions for file tree operations
-function updateFileInTree(files: FileItem[], path: string, content: string): FileItem[] {
+function updateFileInTree(files: ProjectFile[], path: string, content: string): ProjectFile[] {
   return files.map((file) => {
     if (file.path === path) {
       return { ...file, content };
@@ -433,7 +479,7 @@ function updateFileInTree(files: FileItem[], path: string, content: string): Fil
   });
 }
 
-function toggleFolderInTree(files: FileItem[], path: string): FileItem[] {
+function toggleFolderInTree(files: ProjectFile[], path: string): ProjectFile[] {
   return files.map((file) => {
     if (file.path === path) {
       return { ...file, isOpen: !file.isOpen };

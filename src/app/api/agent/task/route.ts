@@ -1,5 +1,5 @@
 /**
- * Agentic Task API - Real Implementation
+ * Agentic Task API - Real Implementation with Al-Marjaa Language
  * Creates files, executes with Al-Marjaa, fixes errors automatically
  */
 
@@ -12,11 +12,6 @@ import path from 'path';
 
 const execAsync = promisify(exec);
 const SANDBOX_DIR = path.join(process.cwd(), 'sandbox');
-
-// Multi-provider configuration
-const PROVIDERS = [
-  { name: 'zai', type: 'free', priority: 1 },
-];
 
 // Ensure sandbox exists
 function ensureSandbox() {
@@ -35,52 +30,130 @@ async function executeAlmarjaa(code: string): Promise<{ success: boolean; output
     fs.writeFileSync(tempFile, code, 'utf-8');
     
     // Try with almarjaa command
+    const almarjaaPath = path.join(process.env.HOME || '/root', '.cargo', 'bin', 'almarjaa');
+    
     try {
-      const { stdout, stderr } = await execAsync(`almarjaa "${tempFile}"`, {
+      const { stdout, stderr } = await execAsync(`"${almarjaaPath}" "${tempFile}"`, {
         timeout: 30000,
         maxBuffer: 1024 * 1024
       });
       
-      return { success: true, output: stdout || stderr };
-    } catch (error: any) {
-      // Try with full path
-      const almarjaaPath = path.join(process.env.HOME || '/root', '.cargo', 'bin', 'almarjaa');
-      
-      try {
-        const { stdout, stderr } = await execAsync(`"${almarjaaPath}" "${tempFile}"`, {
-          timeout: 30000,
-          maxBuffer: 1024 * 1024
-        });
-        
-        return { success: true, output: stdout || stderr };
-      } catch (fallbackError: any) {
-        return { 
-          success: false, 
-          output: fallbackError.stderr || fallbackError.stdout || '',
-          error: fallbackError.message 
-        };
+      // Check for error in stderr
+      if (stderr && stderr.includes('خطأ')) {
+        return { success: false, output: stderr, error: stderr };
       }
+      
+      return { success: true, output: stdout || stderr || 'تم التنفيذ بنجاح' };
+    } catch (error: any) {
+      const output = error.stderr || error.stdout || '';
+      
+      if (output.includes('خطأ')) {
+        return { success: false, output, error: output };
+      }
+      
+      return { 
+        success: false, 
+        output: output || '',
+        error: error.message 
+      };
     }
   } finally {
     try { fs.unlinkSync(tempFile); } catch {}
   }
 }
 
+// Al-Marjaa language specification
+const ALMARJAA_SPEC = `
+لغة المرجع - المواصفات الكاملة:
+
+## الكلمات المفتاحية الأساسية:
+- متغير، ثابت، دالة، صنف، أرجع، اطبع
+- إذا، وإلا، طالما، لكل، في
+- صحيح، خطأ، فارغ، جديد، هذا
+- محاولة، قبض، رمي
+
+## الدوال المدمجة المتاحة:
+- اطبع("نص") - طباعة نص
+- اطبع(متغير) - طباعة قيمة متغير
+- طول(نص) - طول النص
+- نوع(قيمة) - نوع القيمة
+
+## أمثلة صحيحة:
+
+### مثال 1: طباعة بسيطة
+اطبع("مرحباً بالعالم!")؛
+
+### مثال 2: متغيرات
+متغير اسم = "أحمد"؛
+متغير عمر = 25؛
+اطبع("الاسم: " + اسم)؛
+اطبع("العمر: " + عمر)؛
+
+### مثال 3: دوال
+دالة ترحيب(اسم) {
+    اطبع("مرحباً " + اسم + "!")؛
+}
+ترحيب("علي")؛
+
+### مثال 4: حسابات
+دالة جمع(أ، ب) {
+    أرجع أ + ب؛
+}
+متغير نتيجة = جمع(5، 3)؛
+اطبع("النتيجة: " + نتيجة)؛
+
+### مثال 5: شرط
+متغير درجة = 85؛
+إذا درجة >= 90 {
+    اطبع("ممتاز!")؛
+} وإلا إذا درجة >= 70 {
+    اطبع("جيد!")؛
+} وإلا {
+    اطبع("مقبول")؛
+}
+
+### مثال 6: حلقة
+لكل رقم في [1، 2، 3، 4، 5] {
+    اطبع(رقم)؛
+}
+
+### مثال 7: صنف
+صنف شخص {
+    دالة بناء(اسم، عمر) {
+        هذا.اسم = اسم؛
+        هذا.عمر = عمر؛
+    }
+    
+    دالة معلومات() {
+        اطبع("الاسم: " + هذا.اسم)؛
+        اطبع("العمر: " + هذا.عمر)؛
+    }
+}
+
+متغير شخص1 = جديد شخص("سارة"، 30)؛
+شخص1.معلومات()؛
+
+## قواعد مهمة:
+1. الفاصلة المنقوطة (؛) ضرورية في نهاية كل جملة
+2. استخدم الأقواس العربية أو الإنجليزية
+3. الأسماء يمكن أن تكون عربية أو إنجليزية
+4. لا تستخدم دوال غير موجودة مثل قراءة_المدخلات أو اطعدات
+`;
+
 // Generate code using AI
 async function generateCode(description: string): Promise<{ files: Array<{ path: string; content: string; language: string }> }> {
   try {
     const zai = await ZAI.create();
     
-    const systemPrompt = `أنت خبير في لغة المرجع البرمجية العربية. مهمتك إنشاء ملفات مشروع كاملة.
+    const systemPrompt = `أنت خبير في لغة المرجع البرمجية العربية. مهمتك إنشاء ملفات مشروع كاملة تعمل بشكل صحيح.
 
-قواعد لغة المرجع:
-- الكلمات المفتاحية: متغير، ثابت، دالة، صنف، إذا، وإلا، طالما، لكل، في، أرجع، اطبع
-- الفاصلة المنقوطة (؛) ضرورية في نهاية كل سطر
-- التعليقات تبدأ بـ //
-- الدوال: دالة اسم(معاملات) { ... }
-- المتغيرات: متغير اسم = قيمة؛
-- الشرط: إذا شرط { ... } وإلا { ... }
-- الحلقات: لكل عنصر في قائمة { ... }
+${ALMARJAA_SPEC}
+
+## قواعد إضافية:
+- أنشئ كود بسيط وقابل للتنفيذ
+- لا تستخدم دوال إدخال (قراءة) لأنها غير متوفرة
+- استخدم قيم ثابتة للتجربة
+- اجعل الكود قابل للتنفيذ مباشرة
 
 أرجع JSON فقط بالتنسيق:
 {
@@ -96,7 +169,7 @@ async function generateCode(description: string): Promise<{ files: Array<{ path:
     const response = await zai.chat.completions.create({
       messages: [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: `أنشئ: ${description}` }
+        { role: 'user', content: `أنشئ: ${description}\n\nأرجع كود لغة المرجع الصحيح فقط.` }
       ],
       temperature: 0.3,
       max_tokens: 4096
@@ -112,11 +185,23 @@ async function generateCode(description: string): Promise<{ files: Array<{ path:
       } catch {}
     }
 
-    // Fallback
+    // Fallback - extract code from markdown
+    const codeMatch = content.match(/```(?:almarjaa)?\n([\s\S]*?)```/);
+    if (codeMatch) {
+      return {
+        files: [{
+          path: 'main.mrj',
+          content: codeMatch[1].trim(),
+          language: 'almarjaa'
+        }]
+      };
+    }
+
+    // Last fallback
     return {
       files: [{
         path: 'main.mrj',
-        content: `// المشروع\nاطبع("مرحباً بالعالم!")؛`,
+        content: `// مشروع: ${description}\nاطبع("مرحباً بالعالم!")؛`,
         language: 'almarjaa'
       }]
     };
@@ -141,12 +226,15 @@ async function fixErrors(code: string, error: string): Promise<string> {
       messages: [
         {
           role: 'system',
-          content: `أنت خبير في تصحيح أخطار لغة المرجع. أصلح الكود وأرجع الكود المصحح فقط.
+          content: `أنت خبير في تصحيح أخطاء لغة المرجع.
 
-قواعد:
-- الفاصلة المنقوطة (؛) ضرورية
-- الأقواس { } للكتل، ( ) للدوال
-- الكلمات: متغير، ثابت، دالة، إذا، طالما، لكل، اطبع`
+${ALMARJAA_SPEC}
+
+قواعد التصحيح:
+1. تأكد من وجود الفاصلة المنقوطة (؛) في نهاية كل جملة
+2. لا تستخدم دوال غير موجودة
+3. استبدل أي دالة غير موجودة بـ اطبع
+4. أرجع الكود المصحح فقط بدون شرح`
         },
         {
           role: 'user',
@@ -168,9 +256,14 @@ ${error}
     const content = response.choices?.[0]?.message?.content || '';
     
     // Extract code
-    const codeMatch = content.match(/```[\s\S]*?\n([\s\S]*?)```/);
+    const codeMatch = content.match(/```(?:almarjaa)?\n([\s\S]*?)```/);
     if (codeMatch) {
       return codeMatch[1].trim();
+    }
+    
+    // Return as is if looks like code
+    if (content.includes('اطبع') || content.includes('متغير') || content.includes('دالة')) {
+      return content.trim();
     }
     
     return code;
@@ -222,7 +315,7 @@ export async function POST(request: NextRequest) {
               id: `step_${Date.now() + 1}`,
               type: 'think',
               title: '✨ توليد الكود',
-              content: 'جاري إنشاء الكود...',
+              content: 'جاري إنشاء الكود بلغة المرجع...',
               timestamp: new Date().toISOString()
             }
           });
@@ -270,7 +363,7 @@ export async function POST(request: NextRequest) {
                 id: `step_${Date.now()}`,
                 type: 'execute',
                 title: `⚡ تنفيذ المحاولة ${iteration}/${maxIterations}`,
-                content: 'جاري التنفيذ...',
+                content: 'جاري التنفيذ بلغة المرجع...',
                 timestamp: new Date().toISOString()
               }
             });
@@ -337,7 +430,7 @@ export async function POST(request: NextRequest) {
                         id: `step_${Date.now()}`,
                         type: 'create',
                         title: '📝 تحديث الملف',
-                        content: 'تم تحديث الكود',
+                        content: 'تم تحديث الكود بعد الإصلاح',
                         code: currentCode,
                         filePath: mainFile.path,
                         timestamp: new Date().toISOString()
@@ -415,7 +508,7 @@ export async function GET() {
   const scanDir = (dir: string, base: string = dir) => {
     const entries = fs.readdirSync(dir, { withFileTypes: true });
     for (const entry of entries) {
-      if (entry.name.startsWith('.')) continue;
+      if (entry.name.startsWith('.') || entry.name.startsWith('_exec')) continue;
       
       const fullPath = path.join(dir, entry.name);
       const relativePath = path.relative(base, fullPath);

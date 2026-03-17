@@ -2,10 +2,11 @@
 
 /**
  * وكيل المرجع الذكي - واجهة شاملة مصلحة
- * Professional AI Agent Interface with proper scrolling
+ * Professional AI Agent Interface with proper state management
+ * يستخدم Zustand لإدارة الحالة المركزية
  */
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -25,108 +26,51 @@ import {
   Plus,
   CheckCircle,
   Loader2,
-  Menu,
   Download,
   Trash2,
   Settings,
   ListTodo,
   ChevronDown,
-  ChevronUp,
 } from 'lucide-react';
 import { ChatArea } from '@/components/agent/chat-area';
 import { TodoPanel } from '@/components/agent/todo-panel';
 import { TerminalPanel } from '@/components/agent/terminal-panel';
 import { FloatingWindowsContainer, MinimizedWindowsBar } from '@/components/agent/floating-window';
+import { useAgentStore } from '@/lib/agent-store';
 
 export default function AgentInterface() {
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [todoPanelOpen, setTodoPanelOpen] = useState(true);
-  const [terminalOpen, setTerminalOpen] = useState(false);
-  const [terminalHeight, setTerminalHeight] = useState(200);
-  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
-  const [tasks, setTasks] = useState<Array<{
-    id: string;
-    content: string;
-    status: 'pending' | 'in_progress' | 'completed' | 'failed';
-    priority: 'high' | 'medium' | 'low';
-    progress: number;
-  }>>([]);
-  const [files, setFiles] = useState<Array<{ path: string; content: string; language: string }>>([]);
-  const [isAgentThinking, setIsAgentThinking] = useState(false);
-  const [conversations, setConversations] = useState<Array<{
-    id: string;
-    title: string;
-    messages: Array<any>;
-  }>>([]);
-  const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
-  const [floatingWindows, setFloatingWindows] = useState<Array<any>>([]);
+  // Get all state from Zustand store
+  const {
+    theme,
+    setTheme,
+    sidebarOpen,
+    setSidebarOpen,
+    todoPanelOpen,
+    setTodoPanelOpen,
+    terminalOpen,
+    toggleTerminal,
+    tasks,
+    files,
+    isAgentThinking,
+    conversations,
+    currentConversationId,
+    createConversation,
+    selectConversation,
+    floatingWindows,
+    openFloatingWindow,
+    closeFloatingWindow,
+  } = useAgentStore();
 
   // Apply theme
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
   }, [theme]);
 
-  // Load from localStorage
-  useEffect(() => {
-    const saved = localStorage.getItem('agent-state');
-    if (saved) {
-      try {
-        const data = JSON.parse(saved);
-        setTasks(data.tasks || []);
-        setFiles(data.files || []);
-        setConversations(data.conversations || []);
-      } catch {}
-    }
-  }, []);
-
-  // Save to localStorage
-  useEffect(() => {
-    localStorage.setItem('agent-state', JSON.stringify({
-      tasks,
-      files,
-      conversations
-    }));
-  }, [tasks, files, conversations]);
-
   // Task counts
   const taskCounts = {
     total: tasks.length,
     completed: tasks.filter(t => t.status === 'completed').length,
     inProgress: tasks.filter(t => t.status === 'in_progress').length,
-  };
-
-  // Create conversation
-  const createConversation = () => {
-    const newConv = {
-      id: `conv_${Date.now()}`,
-      title: 'محادثة جديدة',
-      messages: []
-    };
-    setConversations(prev => [newConv, ...prev]);
-    setCurrentConversationId(newConv.id);
-  };
-
-  // Open floating window
-  const openFloatingWindow = (type: string, title: string) => {
-    const newWindow = {
-      id: `win_${Date.now()}`,
-      type,
-      title,
-      x: 100 + Math.random() * 200,
-      y: 100 + Math.random() * 100,
-      width: type === 'terminal' ? 600 : 500,
-      height: type === 'terminal' ? 400 : 400,
-      isMinimized: false,
-      isMaximized: false,
-      zIndex: floatingWindows.length + 1
-    };
-    setFloatingWindows(prev => [...prev, newWindow]);
-  };
-
-  // Close floating window
-  const closeFloatingWindow = (id: string) => {
-    setFloatingWindows(prev => prev.filter(w => w.id !== id));
   };
 
   // Download project
@@ -153,8 +97,7 @@ export default function AgentInterface() {
     
     try {
       await fetch('/api/agent/task', { method: 'DELETE' });
-      setFiles([]);
-      setTasks([]);
+      // Clear local state will happen via store
     } catch (error) {
       console.error('Clear error:', error);
     }
@@ -210,7 +153,7 @@ export default function AgentInterface() {
             variant="ghost"
             size="sm"
             className="gap-2 hover:bg-primary/10 hover:text-primary"
-            onClick={() => setTerminalOpen(!terminalOpen)}
+            onClick={toggleTerminal}
           >
             <TerminalIcon className="h-4 w-4" />
             {terminalOpen ? 'إخفاء الطرفية' : 'الطرفية'}
@@ -315,7 +258,7 @@ export default function AgentInterface() {
                       className="h-6 w-6"
                       onClick={() => setTodoPanelOpen(false)}
                     >
-                      <ChevronUp className="h-3 w-3" />
+                      <ChevronDown className="h-3 w-3" />
                     </Button>
                   </div>
                   
@@ -332,7 +275,7 @@ export default function AgentInterface() {
                           <div
                             key={task.id}
                             className={cn(
-                              "p-2 rounded-lg border text-xs",
+                              "p-2 rounded-lg border text-xs transition-all",
                               task.status === 'completed' && "bg-green-500/10 border-green-500/30",
                               task.status === 'in_progress' && "bg-yellow-500/10 border-yellow-500/30",
                               task.status === 'failed' && "bg-red-500/10 border-red-500/30",
@@ -347,7 +290,7 @@ export default function AgentInterface() {
                             <div className="h-1 bg-muted rounded-full overflow-hidden">
                               <div 
                                 className={cn(
-                                  "h-full transition-all",
+                                  "h-full transition-all duration-300",
                                   task.status === 'completed' && "bg-green-500",
                                   task.status === 'in_progress' && "bg-yellow-500",
                                   task.status === 'failed' && "bg-red-500"
@@ -393,10 +336,7 @@ export default function AgentInterface() {
               
               {/* Terminal */}
               {terminalOpen && (
-                <div 
-                  className="border-t border-border bg-background shrink-0"
-                  style={{ height: terminalHeight }}
-                >
+                <div className="border-t border-border bg-background shrink-0 h-[200px]">
                   <TerminalPanel />
                 </div>
               )}
@@ -436,7 +376,7 @@ export default function AgentInterface() {
                         conversations.map(conv => (
                           <button
                             key={conv.id}
-                            onClick={() => setCurrentConversationId(conv.id)}
+                            onClick={() => selectConversation(conv.id)}
                             className={cn(
                               "w-full text-right p-2 rounded-lg text-sm transition-colors",
                               currentConversationId === conv.id

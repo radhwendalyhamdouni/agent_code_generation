@@ -3,6 +3,7 @@
 /**
  * منطقة المحادثة الرئيسية - مصلحة
  * Chat area with proper scrolling and real agent integration
+ * يستخدم Zustand لإدارة الحالة المركزية
  */
 
 import { useState, useRef, useEffect, useCallback } from 'react';
@@ -21,7 +22,6 @@ import {
   Loader2,
   Code,
   FileCode,
-  RefreshCw,
   CheckCircle,
   XCircle,
   Folder,
@@ -30,62 +30,29 @@ import {
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-
-// Types
-interface Message {
-  id: string;
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-  timestamp: Date;
-  isStreaming?: boolean;
-  steps?: ExecutionStep[];
-}
-
-interface ExecutionStep {
-  id: string;
-  type: 'think' | 'create' | 'execute' | 'fix' | 'success' | 'error' | 'info';
-  title: string;
-  content: string;
-  code?: string;
-  filePath?: string;
-  output?: string;
-  timestamp: Date;
-}
-
-interface Task {
-  id: string;
-  content: string;
-  status: 'pending' | 'in_progress' | 'completed' | 'failed';
-  priority: 'high' | 'medium' | 'low';
-  progress: number;
-}
-
-interface ProjectFile {
-  path: string;
-  content: string;
-  language: string;
-}
-
-// In-memory store for persistence
-const memoryStore = {
-  messages: [] as Message[],
-  tasks: [] as Task[],
-  files: [] as ProjectFile[],
-  conversations: [] as { id: string; title: string; messages: Message[] }[],
-  currentConversationId: null as string | null,
-};
+import { useAgentStore, ExecutionStep } from '@/lib/agent-store';
 
 export function ChatArea() {
   const [input, setInput] = useState('');
-  const [messages, setMessages] = useState<Message[]>(memoryStore.messages);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [tasks, setTasks] = useState<Task[]>(memoryStore.tasks);
-  const [files, setFiles] = useState<ProjectFile[]>(memoryStore.files);
   
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Get state from Zustand store
+  const {
+    messages,
+    addMessage,
+    updateMessage,
+    tasks,
+    addTask,
+    updateTask,
+    files,
+    addFile,
+    setIsAgentThinking,
+    isAgentThinking,
+  } = useAgentStore();
 
   // Scroll to bottom when messages change
   const scrollToBottom = useCallback(() => {
@@ -98,107 +65,34 @@ export function ChatArea() {
     scrollToBottom();
   }, [messages, scrollToBottom]);
 
-  // Load persisted data on mount
-  useEffect(() => {
-    const saved = localStorage.getItem('agent-memory');
-    if (saved) {
-      try {
-        const data = JSON.parse(saved);
-        if (data.messages) {
-          setMessages(data.messages);
-          memoryStore.messages = data.messages;
-        }
-        if (data.tasks) {
-          setTasks(data.tasks);
-          memoryStore.tasks = data.tasks;
-        }
-        if (data.files) {
-          setFiles(data.files);
-          memoryStore.files = data.files;
-        }
-      } catch {}
-    }
-  }, []);
-
-  // Save to localStorage
-  const saveMemory = useCallback(() => {
-    localStorage.setItem('agent-memory', JSON.stringify({
-      messages: memoryStore.messages,
-      tasks: memoryStore.tasks,
-      files: memoryStore.files,
-    }));
-  }, []);
-
-  // Add task
-  const addTask = useCallback((content: string, priority: Task['priority'] = 'medium') => {
-    const task: Task = {
-      id: `task_${Date.now()}`,
-      content,
-      status: 'pending',
-      priority,
-      progress: 0,
-    };
-    setTasks(prev => {
-      const updated = [...prev, task];
-      memoryStore.tasks = updated;
-      saveMemory();
-      return updated;
-    });
-    return task.id;
-  }, [saveMemory]);
-
-  // Update task
-  const updateTask = useCallback((id: string, updates: Partial<Task>) => {
-    setTasks(prev => {
-      const updated = prev.map(t => t.id === id ? { ...t, ...updates } : t);
-      memoryStore.tasks = updated;
-      saveMemory();
-      return updated;
-    });
-  }, [saveMemory]);
-
-  // Add file
-  const addFile = useCallback((path: string, content: string, language: string = 'almarjaa') => {
-    setFiles(prev => {
-      const existing = prev.findIndex(f => f.path === path);
-      let updated: ProjectFile[];
-      if (existing >= 0) {
-        updated = [...prev];
-        updated[existing] = { path, content, language };
-      } else {
-        updated = [...prev, { path, content, language }];
-      }
-      memoryStore.files = updated;
-      saveMemory();
-      return updated;
-    });
-  }, [saveMemory]);
-
   // Send message
   const handleSend = useCallback(async () => {
-    if (!input.trim() || isLoading) return;
+    if (!input.trim() || isAgentThinking) return;
 
-    const userMessage: Message = {
-      id: `msg_${Date.now()}`,
+    const userMessage = addMessage({
       role: 'user',
       content: input.trim(),
-      timestamp: new Date(),
-    };
-
-    setMessages(prev => {
-      const updated = [...prev, userMessage];
-      memoryStore.messages = updated;
-      saveMemory();
-      return updated;
     });
 
     const currentInput = input.trim();
     setInput('');
-    setIsLoading(true);
+    setIsAgentThinking(true);
 
     // Add initial task
-    const taskId = addTask(`معالجة: ${currentInput.substring(0, 50)}...`, 'high');
-    updateTask(taskId, { status: 'in_progress', progress: 10 });
+    const task = addTask({
+      content: `معالجة: ${currentInput.substring(0, 50)}${currentInput.length > 50 ? '...' : ''}`,
+      status: 'in_progress',
+      priority: 'high',
+      progress: 5,
+    });
+
+    // Add placeholder assistant message
+    const assistantMessage = addMessage({
+      role: 'assistant',
+      content: '',
+      isStreaming: true,
+      steps: [],
+    });
 
     try {
       // Call the agentic task API
@@ -222,19 +116,6 @@ export function ChatArea() {
       const decoder = new TextDecoder();
       let buffer = '';
       const steps: ExecutionStep[] = [];
-      let assistantContent = '';
-
-      // Add placeholder message
-      const assistantMessage: Message = {
-        id: `msg_${Date.now() + 1}`,
-        role: 'assistant',
-        content: '',
-        timestamp: new Date(),
-        isStreaming: true,
-        steps: [],
-      };
-
-      setMessages(prev => [...prev, assistantMessage]);
 
       while (true) {
         const { done, value } = await reader.read();
@@ -258,42 +139,53 @@ export function ChatArea() {
               steps.push(step);
 
               // Update progress
-              updateTask(taskId, { progress: Math.min(90, steps.length * 15) });
+              updateTask(task.id, { progress: Math.min(90, 10 + steps.length * 15) });
 
               // Add files from create steps
               if (step.type === 'create' && step.code && step.filePath) {
-                addFile(step.filePath, step.code);
+                addFile({
+                  name: step.filePath.split('/').pop() || step.filePath,
+                  path: step.filePath,
+                  type: 'file',
+                  content: step.code,
+                  language: 'almarjaa',
+                });
               }
 
-              // Update message
-              setMessages(prev => prev.map(m => 
-                m.id === assistantMessage.id 
-                  ? { ...m, steps, content: formatStepsAsContent(steps) }
-                  : m
-              ));
+              // Update message with steps
+              updateMessage(assistantMessage.id, {
+                steps: [...steps],
+                content: formatStepsAsContent(steps),
+              });
             } else if (data.type === 'complete') {
               const result = data.result;
               if (result.success) {
-                updateTask(taskId, { status: 'completed', progress: 100 });
+                updateTask(task.id, { status: 'completed', progress: 100 });
                 if (result.files) {
-                  result.files.forEach((f: ProjectFile) => addFile(f.path, f.content, f.language));
+                  result.files.forEach((f: { path: string; content: string; language: string }) => {
+                    addFile({
+                      name: f.path.split('/').pop() || f.path,
+                      path: f.path,
+                      type: 'file',
+                      content: f.content,
+                      language: f.language || 'almarjaa',
+                    });
+                  });
                 }
               } else {
-                updateTask(taskId, { status: 'failed', progress: 100 });
+                updateTask(task.id, { status: 'failed', progress: 100 });
               }
 
-              setMessages(prev => prev.map(m => 
-                m.id === assistantMessage.id 
-                  ? { ...m, isStreaming: false, content: formatStepsAsContent(steps) }
-                  : m
-              ));
+              updateMessage(assistantMessage.id, {
+                isStreaming: false,
+                content: formatStepsAsContent(steps),
+              });
             } else if (data.type === 'error') {
-              updateTask(taskId, { status: 'failed', progress: 100 });
-              setMessages(prev => prev.map(m => 
-                m.id === assistantMessage.id 
-                  ? { ...m, isStreaming: false, content: `خطأ: ${data.error}` }
-                  : m
-              ));
+              updateTask(task.id, { status: 'failed', progress: 100 });
+              updateMessage(assistantMessage.id, {
+                isStreaming: false,
+                content: `❌ **خطأ:** ${data.error}\n\nيمكنني مساعدتك في:\n1. كتابة كود لغة المرجع\n2. إنشاء ملفات جديدة\n3. شرح الكود\n\nحاول مرة أخرى بصيغة مختلفة.`,
+              });
             }
           } catch {
             // Skip invalid JSON
@@ -301,25 +193,18 @@ export function ChatArea() {
         }
       }
 
-      // Save final state
-      saveMemory();
-
     } catch (error: any) {
       console.error('Chat error:', error);
-      updateTask(taskId, { status: 'failed', progress: 100 });
+      updateTask(task.id, { status: 'failed', progress: 100 });
       
-      const errorMessage: Message = {
-        id: `msg_${Date.now() + 2}`,
-        role: 'assistant',
-        content: `عذراً، حدث خطأ: ${error.message}\n\nسأحاول مساعدتك بطريقة أخرى. يمكنني:\n1. كتابة كود لغة المرجع\n2. إنشاء ملفات جديدة\n3. شرح الكود\n\nحاول مرة أخرى بصيغة مختلفة.`,
-        timestamp: new Date(),
-      };
-
-      setMessages(prev => [...prev, errorMessage]);
+      updateMessage(assistantMessage.id, {
+        isStreaming: false,
+        content: `❌ **حدث خطأ:** ${error.message}\n\nسأحاول مساعدتك بطريقة أخرى. يمكنني:\n1. كتابة كود لغة المرجع\n2. إنشاء ملفات جديدة\n3. شرح الكود\n\nحاول مرة أخرى بصيغة مختلفة.`,
+      });
     } finally {
-      setIsLoading(false);
+      setIsAgentThinking(false);
     }
-  }, [input, isLoading, addTask, updateTask, addFile, saveMemory]);
+  }, [input, isAgentThinking, addMessage, addTask, updateTask, addFile, updateMessage, setIsAgentThinking]);
 
   // Format steps as readable content
   const formatStepsAsContent = (steps: ExecutionStep[]): string => {
@@ -329,9 +214,18 @@ export function ChatArea() {
     const createSteps = steps.filter(s => s.type === 'create');
     const successSteps = steps.filter(s => s.type === 'success');
     const errorSteps = steps.filter(s => s.type === 'error');
+    const thinkSteps = steps.filter(s => s.type === 'think');
     
     if (successSteps.length > 0) {
       content += '✅ **تم إنجاز المهمة بنجاح!**\n\n';
+    }
+    
+    if (thinkSteps.length > 0) {
+      content += '### 🧠 التحليل:\n';
+      thinkSteps.forEach(s => {
+        content += `- ${s.content}\n`;
+      });
+      content += '\n';
     }
     
     if (createSteps.length > 0) {
@@ -385,6 +279,10 @@ export function ChatArea() {
     }
   };
 
+  // Active tasks
+  const activeTasks = tasks.filter(t => t.status === 'in_progress');
+  const recentFiles = files.slice(-5);
+
   return (
     <div className="h-full flex flex-col" dir="rtl">
       {/* Messages Area - Fixed scrolling */}
@@ -407,7 +305,7 @@ export function ChatArea() {
                   onExecute={executeCode}
                 />
               ))}
-              {isLoading && messages[messages.length - 1]?.role !== 'assistant' && (
+              {isAgentThinking && messages[messages.length - 1]?.role !== 'assistant' && (
                 <TypingIndicator />
               )}
               <div ref={messagesEndRef} className="h-4" />
@@ -417,15 +315,15 @@ export function ChatArea() {
       </div>
 
       {/* Tasks Preview */}
-      {tasks.filter(t => t.status === 'in_progress').length > 0 && (
-        <div className="border-t border-border bg-muted/30 px-4 py-2">
-          <div className="max-w-4xl mx-auto flex items-center gap-3">
-            <Loader2 className="h-4 w-4 animate-spin text-primary" />
-            <span className="text-sm">المهام النشطة:</span>
-            {tasks.filter(t => t.status === 'in_progress').map(task => (
-              <Badge key={task.id} variant="outline" className="text-xs">
-                {task.content.substring(0, 30)}...
-                <span className="mr-2">{task.progress}%</span>
+      {activeTasks.length > 0 && (
+        <div className="border-t border-border bg-muted/30 px-4 py-2 shrink-0">
+          <div className="max-w-4xl mx-auto flex items-center gap-3 flex-wrap">
+            <Loader2 className="h-4 w-4 animate-spin text-primary shrink-0" />
+            <span className="text-sm shrink-0">المهام النشطة:</span>
+            {activeTasks.map(task => (
+              <Badge key={task.id} variant="outline" className="text-xs gap-1">
+                {task.content.substring(0, 25)}...
+                <span className="text-primary">{task.progress}%</span>
               </Badge>
             ))}
           </div>
@@ -433,12 +331,12 @@ export function ChatArea() {
       )}
 
       {/* Files Preview */}
-      {files.length > 0 && (
-        <div className="border-t border-border bg-muted/20 px-4 py-2">
+      {recentFiles.length > 0 && (
+        <div className="border-t border-border bg-muted/20 px-4 py-2 shrink-0">
           <div className="max-w-4xl mx-auto flex items-center gap-2 flex-wrap">
-            <Folder className="h-4 w-4 text-primary" />
-            <span className="text-sm text-muted-foreground">الملفات:</span>
-            {files.slice(0, 5).map(file => (
+            <Folder className="h-4 w-4 text-primary shrink-0" />
+            <span className="text-sm text-muted-foreground shrink-0">الملفات:</span>
+            {recentFiles.map(file => (
               <Badge key={file.path} variant="secondary" className="text-xs">
                 {file.path}
               </Badge>
@@ -461,14 +359,14 @@ export function ChatArea() {
               onKeyDown={handleKeyDown}
               placeholder="اكتب وصف المشروع... مثال: أنشئ برنامج حاسبة بلغة المرجع"
               className="min-h-[52px] max-h-[200px] resize-none bg-muted/50 border-border focus-visible:ring-primary/50 pr-4 pl-12"
-              disabled={isLoading}
+              disabled={isAgentThinking}
             />
             <Button
               onClick={handleSend}
-              disabled={!input.trim() || isLoading}
+              disabled={!input.trim() || isAgentThinking}
               className="absolute left-2 bottom-2 h-9 w-9 p-0 bg-primary hover:bg-primary/90 rounded-lg"
             >
-              {isLoading ? (
+              {isAgentThinking ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <Send className="h-4 w-4" />
@@ -550,7 +448,14 @@ function MessageBubble({
   onCopy, 
   onExecute 
 }: { 
-  message: Message; 
+  message: { 
+    id: string;
+    role: 'user' | 'assistant' | 'system';
+    content: string;
+    timestamp: Date;
+    isStreaming?: boolean;
+    steps?: ExecutionStep[];
+  }; 
   copiedId: string | null; 
   onCopy: (text: string, id: string) => void;
   onExecute: (code: string, language: string) => Promise<any>;
