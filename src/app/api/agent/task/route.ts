@@ -303,12 +303,120 @@ function findMatchingProgram(description: string): { key: string; program: typeo
   return null;
 }
 
+// ═══════════════════════════════════════════════════════════════
+// نظام الإصلاح التلقائي - يصحح الكود الفاشل تلقائياً
+// ═══════════════════════════════════════════════════════════════
+async function generateAndTestCode(
+  description: string,
+  maxIterations: number,
+  onStep: (step: any) => void
+): Promise<{ success: boolean; code: string; output: string; iterations: number; error?: string }> {
+  
+  await aiEngine.initialize();
+  
+  let code = '';
+  let iteration = 0;
+  let lastError = '';
+  
+  // الخطوة 1: توليد الكود الأولي
+  onStep({
+    id: `step_${Date.now()}`,
+    type: 'think',
+    title: '🤖 توليد الكود',
+    content: 'جاري توليد الكود بالذكاء الاصطناعي...',
+    timestamp: new Date().toISOString()
+  });
+  
+  const genResult = await aiEngine.generateCode(description);
+  if (!genResult.success || !genResult.code) {
+    return { success: false, code: '', output: '', iterations: 0, error: genResult.error || 'فشل توليد الكود' };
+  }
+  code = genResult.code;
+  
+  // حلقة الاختبار والإصلاح
+  while (iteration < maxIterations) {
+    iteration++;
+    
+    onStep({
+      id: `step_${Date.now()}`,
+      type: 'execute',
+      title: `⚡ اختبار المحاولة ${iteration}/${maxIterations}`,
+      content: 'جاري تنفيذ الكود في مترجم المرجع...',
+      timestamp: new Date().toISOString()
+    });
+    
+    const result = await executeAlmarjaa(code);
+    
+    if (result.success) {
+      onStep({
+        id: `step_${Date.now()}`,
+        type: 'success',
+        title: '✅ نجح التنفيذ!',
+        content: `الكود يعمل بشكل صحيح بعد ${iteration} محاولة`,
+        output: result.output,
+        timestamp: new Date().toISOString()
+      });
+      
+      return { success: true, code, output: result.output, iterations: iteration };
+    }
+    
+    lastError = result.error || 'خطأ غير معروف';
+    
+    onStep({
+      id: `step_${Date.now()}`,
+      type: 'error',
+      title: `❌ فشل المحاولة ${iteration}`,
+      content: `خطأ: ${lastError.substring(0, 200)}...`,
+      error: lastError,
+      timestamp: new Date().toISOString()
+    });
+    
+    // إذا لم نصل للحد الأقصى، حاول الإصلاح
+    if (iteration < maxIterations) {
+      onStep({
+        id: `step_${Date.now()}`,
+        type: 'think',
+        title: '🔧 إصلاح الكود',
+        content: 'جاري إصلاح الكود بالذكاء الاصطناعي...',
+        timestamp: new Date().toISOString()
+      });
+      
+      const fixResult = await aiEngine.fixCode(code, lastError);
+      if (fixResult.success && fixResult.fixedCode) {
+        code = fixResult.fixedCode;
+        onStep({
+          id: `step_${Date.now()}`,
+          type: 'think',
+          title: '📝 كود مصحح',
+          content: 'تم توليد نسخة مصححة، جاري التجربة...',
+          timestamp: new Date().toISOString()
+        });
+      } else {
+        // إذا فشل الإصلاح، أعد التوليد من جديد
+        onStep({
+          id: `step_${Date.now()}`,
+          type: 'think',
+          title: '🔄 إعادة التوليد',
+          content: 'فشل الإصلاح، جاري توليد كود جديد...',
+          timestamp: new Date().toISOString()
+        });
+        const newGen = await aiEngine.generateCode(description + '\nملاحظة: الكود السابق فشل بهذا الخطأ: ' + lastError);
+        if (newGen.success && newGen.code) {
+          code = newGen.code;
+        }
+      }
+    }
+  }
+  
+  return { success: false, code, output: '', iterations: iteration, error: lastError };
+}
+
 // POST handler
 export async function POST(request: NextRequest) {
   ensureSandbox();
   
   const body = await request.json();
-  const { description, stream = false, maxIterations = 3 } = body;
+  const { description, stream = false, maxIterations = 5 } = body;
 
   if (!description) {
     return NextResponse.json({ success: false, error: 'الوصف مطلوب' }, { status: 400 });
@@ -339,45 +447,90 @@ export async function POST(request: NextRequest) {
               title: '🧠 تحليل المطلوب',
               content: match 
                 ? `تم العثور على برنامج مختبر: ${match.program.description}`
-                : `استخدام الذكاء الاصطناعي لتوليد كود جديد`,
+                : `استخدام الذكاء الاصطناعي لتوليد كود جديد مع اختبار تلقائي`,
               timestamp: new Date().toISOString()
             }
           });
 
           let code = '';
-          let programType = '';
+          let finalOutput = '';
+          let iterations = 1;
+          let success = false;
           
           if (match) {
-            // استخدام برنامج مختبر
+            // استخدام برنامج مختبر مسبقاً
             code = match.program.code;
-            programType = match.key;
-          } else {
-            // توليد بالـ AI
+            
+            // حتى البرامج المختبرة نختبرها مرة أخرى للتأكد
             send({
               type: 'step',
               step: {
                 id: `step_${Date.now()}`,
-                type: 'think',
-                title: '🤖 توليد الكود',
-                content: 'جاري توليد الكود بالذكاء الاصطناعي...',
+                type: 'execute',
+                title: '⚡ التحقق من البرنامج المختبر',
+                content: 'جاري التحقق من عمل البرنامج...',
                 timestamp: new Date().toISOString()
               }
             });
             
-            await aiEngine.initialize();
-            const result = await aiEngine.generateCode(description);
+            const result = await executeAlmarjaa(code);
+            success = result.success;
+            finalOutput = result.output;
             
-            if (result.success && result.code) {
-              code = result.code;
-              programType = 'ai_generated';
+            if (success) {
+              send({
+                type: 'step',
+                step: {
+                  id: `step_${Date.now()}`,
+                  type: 'success',
+                  title: '✅ البرنامج المختبر يعمل!',
+                  content: result.output,
+                  output: result.output,
+                  timestamp: new Date().toISOString()
+                }
+              });
             } else {
-              // Fallback إلى حاسبة
-              code = TESTED_PROGRAMS.calculator.code;
-              programType = 'calculator';
+              send({
+                type: 'step',
+                step: {
+                  id: `step_${Date.now()}`,
+                  type: 'error',
+                  title: '⚠️ البرنامج المختبر فشل!',
+                  content: 'جاري توليد كود جديد...',
+                  error: result.error,
+                  timestamp: new Date().toISOString()
+                }
+              });
+            }
+          }
+          
+          // إذا لم يكن هناك برنامج مختبر أو فشل، استخدم نظام الإصلاح التلقائي
+          if (!match || !success) {
+            const result = await generateAndTestCode(description, maxIterations, (step) => {
+              send({ type: 'step', step });
+            });
+            
+            code = result.code;
+            success = result.success;
+            finalOutput = result.output;
+            iterations = result.iterations;
+            
+            if (!success) {
+              send({
+                type: 'step',
+                step: {
+                  id: `step_${Date.now()}`,
+                  type: 'error',
+                  title: '❌ فشل بعد كل المحاولات',
+                  content: `فشل توليد كود صالح بعد ${iterations} محاولات`,
+                  error: result.error,
+                  timestamp: new Date().toISOString()
+                }
+              });
             }
           }
 
-          // Step 2: Create file
+          // إنشاء الملف النهائي
           const filePath = 'main.mrj';
           const fullPath = path.join(SANDBOX_DIR, filePath);
           fs.writeFileSync(fullPath, code, 'utf-8');
@@ -387,62 +540,24 @@ export async function POST(request: NextRequest) {
             step: {
               id: `step_${Date.now()}`,
               type: 'create',
-              title: '📄 إنشاء ملف',
-              content: `تم إنشاء ${filePath}`,
+              title: '📄 حفظ الملف',
+              content: `تم حفظ ${filePath} (${code.length} بايت)`,
               code: code,
               filePath: filePath,
               timestamp: new Date().toISOString()
             }
           });
 
-          // Step 3: Execute
-          send({
-            type: 'step',
-            step: {
-              id: `step_${Date.now()}`,
-              type: 'execute',
-              title: '⚡ تنفيذ البرنامج',
-              content: 'جاري التنفيذ...',
-              timestamp: new Date().toISOString()
-            }
-          });
-
-          const result = await executeAlmarjaa(code);
-
-          if (result.success) {
-            send({
-              type: 'step',
-              step: {
-                id: `step_${Date.now()}`,
-                type: 'success',
-                title: '✅ نجح التنفيذ!',
-                content: result.output,
-                output: result.output,
-                timestamp: new Date().toISOString()
-              }
-            });
-          } else {
-            send({
-              type: 'step',
-              step: {
-                id: `step_${Date.now()}`,
-                type: 'error',
-                title: '❌ خطأ في التنفيذ',
-                content: result.error || 'خطأ',
-                error: result.error,
-                timestamp: new Date().toISOString()
-              }
-            });
-          }
-
           // Final result
           send({
             type: 'complete',
             result: {
-              success: result.success,
-              iterations: 1,
+              success,
+              iterations,
               files: [{ path: filePath, content: code, language: 'almarjaa' }],
-              output: result.output
+              output: finalOutput,
+              tested: true,
+              guaranteed: success
             }
           });
 
@@ -469,25 +584,38 @@ export async function POST(request: NextRequest) {
   // Non-streaming response
   try {
     let code = '';
+    let success = false;
+    let output = '';
+    let iterations = 1;
     
     if (match) {
       code = match.program.code;
-    } else {
-      await aiEngine.initialize();
-      const result = await aiEngine.generateCode(description);
-      code = result.success && result.code ? result.code : TESTED_PROGRAMS.calculator.code;
+      const result = await executeAlmarjaa(code);
+      success = result.success;
+      output = result.output;
+    }
+    
+    if (!match || !success) {
+      const steps: any[] = [];
+      const genResult = await generateAndTestCode(description, maxIterations, (step) => {
+        steps.push(step);
+      });
+      code = genResult.code;
+      success = genResult.success;
+      output = genResult.output;
+      iterations = genResult.iterations;
     }
 
     const filePath = path.join(SANDBOX_DIR, 'main.mrj');
     fs.writeFileSync(filePath, code, 'utf-8');
 
-    const result = await executeAlmarjaa(code);
-
     return NextResponse.json({
-      success: result.success,
+      success,
       files: [{ path: 'main.mrj', content: code, language: 'almarjaa' }],
-      output: result.output,
-      error: result.error
+      output,
+      iterations,
+      tested: true,
+      guaranteed: success
     });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
