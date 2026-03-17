@@ -43,7 +43,7 @@ import {
   Save,
   X,
 } from 'lucide-react';
-import { useAgentStore, FileItem } from '@/lib/agent-store';
+import { useAgentStore, ProjectFile } from '@/lib/agent-store';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
@@ -142,7 +142,12 @@ export function FileManager() {
   const handleCreateFile = useCallback(() => {
     if (!newFileName.trim()) return;
 
-    const newFile: FileItem = {
+    // منع تكرار الملفات
+    if (files.some(f => f.path === newFileName)) {
+      return;
+    }
+
+    const newFile: ProjectFile = {
       name: newFileName,
       path: newFileName,
       type: 'file',
@@ -244,19 +249,24 @@ export function FileManager() {
                   </Button>
                 </div>
               ) : (
-                files.map((file) => (
-                  <FileTreeItem
-                    key={file.path}
-                    file={file}
-                    depth={0}
-                    selectedPath={selectedFile}
-                    onSelect={handleSelectFile}
-                    onDelete={handleDeleteFile}
-                    onCopyPath={handleCopyPath}
-                    copiedPath={copiedPath}
-                    onToggleFolder={toggleFolder}
-                  />
-                ))
+                // إزالة الملفات المكررة قبل العرض
+                [...files]
+                  .filter((file, index, self) => 
+                    self.findIndex(f => f.path === file.path) === index
+                  )
+                  .map((file, index) => (
+                    <FileTreeItem
+                      key={`file-${index}-${file.path}`}
+                      file={file}
+                      depth={0}
+                      selectedPath={selectedFile}
+                      onSelect={handleSelectFile}
+                      onDelete={handleDeleteFile}
+                      onCopyPath={handleCopyPath}
+                      copiedPath={copiedPath}
+                      onToggleFolder={toggleFolder}
+                    />
+                  ))
               )}
             </div>
           </ScrollArea>
@@ -375,7 +385,7 @@ export function FileManager() {
 
 // File Tree Item Component
 interface FileTreeItemProps {
-  file: FileItem;
+  file: ProjectFile;
   depth: number;
   selectedPath: string | null;
   onSelect: (path: string, content?: string) => void;
@@ -457,7 +467,7 @@ function FileTreeItem({
 }
 
 // Helper function to find file by path
-function findFile(files: FileItem[], path: string | null): FileItem | null {
+function findFile(files: ProjectFile[], path: string | null): ProjectFile | null {
   if (!path) return null;
   
   for (const file of files) {
