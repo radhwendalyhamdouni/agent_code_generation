@@ -336,8 +336,8 @@ export function ChatArea() {
           <div className="max-w-4xl mx-auto flex items-center gap-2 flex-wrap">
             <Folder className="h-4 w-4 text-primary shrink-0" />
             <span className="text-sm text-muted-foreground shrink-0">الملفات:</span>
-            {recentFiles.map(file => (
-              <Badge key={file.path} variant="secondary" className="text-xs">
+            {recentFiles.map((file, idx) => (
+              <Badge key={`${file.path}-${idx}`} variant="secondary" className="text-xs">
                 {file.path}
               </Badge>
             ))}
@@ -521,8 +521,8 @@ function MessageBubble({
               {/* Show execution steps */}
               {message.steps && message.steps.length > 0 && (
                 <div className="mt-4 space-y-2">
-                  {message.steps.map((step) => (
-                    <StepIndicator key={step.id} step={step} />
+                  {message.steps.map((step, idx) => (
+                    <StepIndicator key={`${step.id}-${idx}`} step={step} />
                   ))}
                 </div>
               )}
@@ -648,20 +648,24 @@ function CodeBlockComponent({
       </div>
       
       {/* Code */}
-      <SyntaxHighlighter
-        language={language === 'almarjaa' ? 'javascript' : language}
-        style={vscDarkPlus}
-        customStyle={{
-          margin: 0,
-          padding: '1rem',
-          fontSize: '0.875rem',
-          background: 'transparent',
-          maxHeight: '400px',
-          overflow: 'auto',
-        }}
-      >
-        {code}
-      </SyntaxHighlighter>
+      <div dir="rtl" className="overflow-x-auto">
+        <SyntaxHighlighter
+          language={language === 'almarjaa' ? 'javascript' : language}
+          style={vscDarkPlus}
+          customStyle={{
+            margin: 0,
+            padding: '1rem',
+            fontSize: '0.875rem',
+            background: 'transparent',
+            maxHeight: '400px',
+            overflow: 'auto',
+            direction: 'rtl',
+            textAlign: 'right',
+          }}
+        >
+          {code}
+        </SyntaxHighlighter>
+      </div>
 
       {/* Execution Result */}
       {result && (

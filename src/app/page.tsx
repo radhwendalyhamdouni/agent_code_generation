@@ -321,8 +321,8 @@ export default function AgentInterface() {
                     <div className="border-t border-border p-2 shrink-0">
                       <span className="text-xs text-muted-foreground mb-2 block">الملفات ({files.length})</span>
                       <div className="space-y-1">
-                        {files.slice(0, 3).map(file => (
-                          <Badge key={file.path} variant="outline" className="text-[10px] w-full justify-start truncate">
+                        {files.slice(0, 3).map((file, idx) => (
+                          <Badge key={`${file.path}-${idx}`} variant="outline" className="text-[10px] w-full justify-start truncate">
                             {file.path}
                           </Badge>
                         ))}

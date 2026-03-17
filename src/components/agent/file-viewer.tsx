@@ -368,21 +368,33 @@ export function FileViewer({ className }: FileViewerProps) {
               {/* File Content */}
               <ScrollArea className="flex-1">
                 {activeTab === 'code' && (
-                  <div className="relative">
-                    <SyntaxHighlighter
-                      language={getLanguage(selectedFile.language || 'almarjaa')}
-                      style={vscDarkPlus}
-                      customStyle={{
-                        margin: 0,
-                        padding: '1rem',
-                        fontSize: '0.875rem',
-                        background: 'transparent',
-                        minHeight: '100%',
-                      }}
-                      showLineNumbers
-                    >
-                      {selectedFile.content || '// ملف فارغ'}
-                    </SyntaxHighlighter>
+                  <div className="relative" dir="rtl">
+                    <pre className="p-4 text-sm overflow-x-auto" style={{ direction: 'rtl', textAlign: 'right' }}>
+                      <code className="language-almarjaa">
+                        <SyntaxHighlighter
+                          language={getLanguage(selectedFile.language || 'almarjaa')}
+                          style={vscDarkPlus}
+                          customStyle={{
+                            margin: 0,
+                            padding: '1rem',
+                            fontSize: '0.875rem',
+                            background: 'transparent',
+                            minHeight: '100%',
+                            direction: 'rtl',
+                            textAlign: 'right',
+                          }}
+                          showLineNumbers
+                          lineNumberStyle={{
+                            direction: 'ltr',
+                            minWidth: '2.5em',
+                            paddingRight: '1em',
+                            color: '#6b7280',
+                          }}
+                        >
+                          {selectedFile.content || '// ملف فارغ'}
+                        </SyntaxHighlighter>
+                      </code>
+                    </pre>
                   </div>
                 )}
 
