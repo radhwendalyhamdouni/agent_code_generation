@@ -97,15 +97,19 @@ export function FileManager() {
     toggleFolder,
   } = useAgentStore();
 
-  // Load files from server on mount
+  // Load files from server on mount AND sync with store
   useEffect(() => {
     loadFiles();
+    
+    // تحديث دوري كل 5 ثواني للتحقق من ملفات جديدة
+    const interval = setInterval(loadFiles, 5000);
+    return () => clearInterval(interval);
   }, []);
 
   // Get selected file data
   const selectedFileData = findFile(files, selectedFile);
 
-  // Load files from API
+  // Load files from API and merge with store
   const loadFiles = useCallback(async () => {
     setLoading(true);
     try {
@@ -113,13 +117,29 @@ export function FileManager() {
       if (response.ok) {
         const data = await response.json();
         if (data.files && data.files.length > 0) {
-          setFiles(data.files.map((f: any) => ({
+          const serverFiles = data.files.map((f: any) => ({
             name: f.name || f.path.split('/').pop(),
             path: f.path,
             type: 'file' as const,
             content: f.content,
             language: f.language || 'text',
-          })));
+          }));
+          
+          // دمج مع الملفات الموجودة في store بدون تكرار
+          setFiles(prevFiles => {
+            const mergedFiles = [...prevFiles];
+            for (const sf of serverFiles) {
+              const existingIdx = mergedFiles.findIndex(f => f.path === sf.path);
+              if (existingIdx >= 0) {
+                // تحديث المحتوى إذا كان الملف موجوداً
+                mergedFiles[existingIdx] = { ...mergedFiles[existingIdx], ...sf };
+              } else {
+                // إضافة ملف جديد
+                mergedFiles.push(sf);
+              }
+            }
+            return mergedFiles;
+          });
         }
       }
     } catch (error) {
@@ -275,6 +295,11 @@ export function FileManager() {
           <Badge variant="outline" className="text-[10px]">
             {files.length}
           </Badge>
+          {files.length > 0 && (
+            <Badge variant="secondary" className="text-[10px] bg-green-500/20 text-green-400">
+              حقيقي
+            </Badge>
+          )}
         </div>
         <div className="flex items-center gap-1">
           <Button
@@ -283,6 +308,7 @@ export function FileManager() {
             className="h-7 w-7"
             onClick={loadFiles}
             disabled={loading}
+            title="تحديث"
           >
             <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
           </Button>
@@ -291,9 +317,18 @@ export function FileManager() {
             size="icon"
             className="h-7 w-7"
             onClick={() => setIsNewFileDialogOpen(true)}
+            title="ملف جديد"
           >
             <Plus className="h-3.5 w-3.5" />
           </Button>
+        </div>
+      </div>
+      
+      {/* Project Path */}
+      <div className="px-3 py-1.5 border-b border-border bg-muted/20 shrink-0">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Folder className="h-3 w-3" />
+          <code className="text-[10px] bg-muted/50 px-1.5 py-0.5 rounded">~/sandbox/</code>
         </div>
       </div>
 

@@ -166,7 +166,7 @@ export interface AgentState {
 
   // Files
   files: ProjectFile[];
-  setFiles: (files: ProjectFile[]) => void;
+  setFiles: (files: ProjectFile[] | ((prev: ProjectFile[]) => ProjectFile[])) => void;
   selectedFile: string | null;
   setSelectedFile: (path: string | null) => void;
   updateFileContent: (path: string, content: string) => void;
@@ -349,7 +349,14 @@ export const useAgentStore = create<AgentState>()(
 
       // Files
       files: [],
-      setFiles: (files) => set({ files }),
+      setFiles: (files) => {
+        // قبول callback أو قيمة مباشرة
+        if (typeof files === 'function') {
+          set((state) => ({ files: files(state.files) }));
+        } else {
+          set({ files });
+        }
+      },
       selectedFile: null,
       setSelectedFile: (path) => set({ selectedFile: path }),
       updateFileContent: (path, content) => set((state) => ({

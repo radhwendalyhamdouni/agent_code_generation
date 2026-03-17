@@ -143,13 +143,26 @@ export function ChatArea() {
 
               // Add files from create steps
               if (step.type === 'create' && step.code && step.filePath) {
-                addFile({
+                const newFile = {
                   name: step.filePath.split('/').pop() || step.filePath,
                   path: step.filePath,
-                  type: 'file',
+                  type: 'file' as const,
                   content: step.code,
                   language: 'almarjaa',
-                });
+                };
+                addFile(newFile);
+                
+                // حفظ الملف على السيرفر فعلياً
+                fetch('/api/files', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    action: 'create',
+                    path: step.filePath,
+                    name: newFile.name,
+                    content: step.code,
+                  }),
+                }).catch(console.error);
               }
 
               // Update message with steps
@@ -163,13 +176,26 @@ export function ChatArea() {
                 updateTask(task.id, { status: 'completed', progress: 100 });
                 if (result.files) {
                   result.files.forEach((f: { path: string; content: string; language: string }) => {
-                    addFile({
+                    const newFile = {
                       name: f.path.split('/').pop() || f.path,
                       path: f.path,
-                      type: 'file',
+                      type: 'file' as const,
                       content: f.content,
                       language: f.language || 'almarjaa',
-                    });
+                    };
+                    addFile(newFile);
+                    
+                    // حفظ الملف على السيرفر فعلياً
+                    fetch('/api/files', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        action: 'create',
+                        path: f.path,
+                        name: newFile.name,
+                        content: f.content,
+                      }),
+                    }).catch(console.error);
                   });
                 }
               } else {
