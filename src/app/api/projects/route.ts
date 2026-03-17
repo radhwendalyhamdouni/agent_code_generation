@@ -167,6 +167,82 @@ almarjaa main.mrj
   }
 };
 
+// المشاريع المنجزة والمختبرة
+const COMPLETED_PROJECTS: Array<{
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  features: string[];
+  tested: boolean;
+  date: string;
+}> = [
+  {
+    id: 'alarm_app',
+    name: 'تطبيق المنبه الذكي',
+    description: 'تطبيق منبه متكامل للهاتف مع واجهة عصرية',
+    category: 'تطبيقات الهاتف',
+    features: [
+      'إضافة وإدارة منبهات متعددة',
+      'تفعيل وتعطيل المنبهات',
+      'غفوة ذكية (تأخير 5 دقائق)',
+      'تتبع عدد الغفوات',
+      'واجهة مستخدم عربية جميلة'
+    ],
+    tested: true,
+    date: '2025-03-17'
+  },
+  {
+    id: 'calculator',
+    name: 'الحاسبة البسيطة',
+    description: 'حاسبة للعمليات الحسابية الأساسية',
+    category: 'أدوات',
+    features: [
+      'الجمع والطرح',
+      'الضرب والقسمة',
+      'معالجة الخطأ (القسمة على صفر)'
+    ],
+    tested: true,
+    date: '2025-03-15'
+  },
+  {
+    id: 'fibonacci',
+    name: 'متتالية فيبوناتشي',
+    description: 'حساب متتالية فيبوناتشي بشكل تكراري',
+    category: 'خوارزميات',
+    features: [
+      'حساب تكراري',
+      'عرض الأرقام العشر الأولى'
+    ],
+    tested: true,
+    date: '2025-03-14'
+  },
+  {
+    id: 'factorial',
+    name: 'حساب المضروب',
+    description: 'حساب مضروب أي عدد',
+    category: 'خوارزميات',
+    features: [
+      'حساب تكراري',
+      'دعم الأعداد الصحيحة'
+    ],
+    tested: true,
+    date: '2025-03-14'
+  },
+  {
+    id: 'multiplication_table',
+    name: 'جدول الضرب',
+    description: 'عرض جدول ضرب لأي عدد',
+    category: 'تعليم',
+    features: [
+      'جدول من 1 إلى 10',
+      'سهولة الاستخدام'
+    ],
+    tested: true,
+    date: '2025-03-13'
+  }
+];
+
 // GET - List projects
 export async function GET(request: NextRequest) {
   try {
@@ -183,8 +259,15 @@ export async function GET(request: NextRequest) {
         }))
       });
     }
+    
+    if (action === 'completed') {
+      return NextResponse.json({
+        success: true,
+        projects: COMPLETED_PROJECTS
+      });
+    }
 
-    // List existing projects
+    // List existing projects in sandbox
     const projects: Array<{
       name: string;
       path: string;
@@ -207,7 +290,8 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      projects
+      projects,
+      completed: COMPLETED_PROJECTS
     });
 
   } catch (error: any) {
