@@ -1,14 +1,13 @@
 'use client';
 
 /**
- * منطقة المحادثة الرئيسية
- * Chat area with message display, markdown support, and code blocks
+ * منطقة المحادثة الرئيسية - مصلحة
+ * Chat area with proper scrolling and real agent integration
  */
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import {
@@ -23,120 +22,337 @@ import {
   Code,
   FileCode,
   RefreshCw,
+  CheckCircle,
+  XCircle,
+  Folder,
+  Terminal,
 } from 'lucide-react';
-import { useAgentStore, Message, CodeBlock } from '@/lib/agent-store';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
+// Types
+interface Message {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  timestamp: Date;
+  isStreaming?: boolean;
+  steps?: ExecutionStep[];
+}
+
+interface ExecutionStep {
+  id: string;
+  type: 'think' | 'create' | 'execute' | 'fix' | 'success' | 'error' | 'info';
+  title: string;
+  content: string;
+  code?: string;
+  filePath?: string;
+  output?: string;
+  timestamp: Date;
+}
+
+interface Task {
+  id: string;
+  content: string;
+  status: 'pending' | 'in_progress' | 'completed' | 'failed';
+  priority: 'high' | 'medium' | 'low';
+  progress: number;
+}
+
+interface ProjectFile {
+  path: string;
+  content: string;
+  language: string;
+}
+
+// In-memory store for persistence
+const memoryStore = {
+  messages: [] as Message[],
+  tasks: [] as Task[],
+  files: [] as ProjectFile[],
+  conversations: [] as { id: string; title: string; messages: Message[] }[],
+  currentConversationId: null as string | null,
+};
+
 export function ChatArea() {
   const [input, setInput] = useState('');
+  const [messages, setMessages] = useState<Message[]>(memoryStore.messages);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [tasks, setTasks] = useState<Task[]>(memoryStore.tasks);
+  const [files, setFiles] = useState<ProjectFile[]>(memoryStore.files);
+  
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  
-  const {
-    conversations,
-    currentConversationId,
-    addMessage,
-    updateMessage,
-    isAgentThinking,
-    setIsAgentThinking,
-    createConversation,
-    terminalOpen,
-    setTerminalOpen,
-    addTerminalLine,
-  } = useAgentStore();
 
-  const currentConversation = conversations.find((c) => c.id === currentConversationId);
-  const messages = currentConversation?.messages || [];
-
-  // Auto-scroll to bottom
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
-
-  // Auto-resize textarea
-  useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 200)}px`;
+  // Scroll to bottom when messages change
+  const scrollToBottom = useCallback(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [input]);
+  }, []);
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, scrollToBottom]);
+
+  // Load persisted data on mount
+  useEffect(() => {
+    const saved = localStorage.getItem('agent-memory');
+    if (saved) {
+      try {
+        const data = JSON.parse(saved);
+        if (data.messages) {
+          setMessages(data.messages);
+          memoryStore.messages = data.messages;
+        }
+        if (data.tasks) {
+          setTasks(data.tasks);
+          memoryStore.tasks = data.tasks;
+        }
+        if (data.files) {
+          setFiles(data.files);
+          memoryStore.files = data.files;
+        }
+      } catch {}
+    }
+  }, []);
+
+  // Save to localStorage
+  const saveMemory = useCallback(() => {
+    localStorage.setItem('agent-memory', JSON.stringify({
+      messages: memoryStore.messages,
+      tasks: memoryStore.tasks,
+      files: memoryStore.files,
+    }));
+  }, []);
+
+  // Add task
+  const addTask = useCallback((content: string, priority: Task['priority'] = 'medium') => {
+    const task: Task = {
+      id: `task_${Date.now()}`,
+      content,
+      status: 'pending',
+      priority,
+      progress: 0,
+    };
+    setTasks(prev => {
+      const updated = [...prev, task];
+      memoryStore.tasks = updated;
+      saveMemory();
+      return updated;
+    });
+    return task.id;
+  }, [saveMemory]);
+
+  // Update task
+  const updateTask = useCallback((id: string, updates: Partial<Task>) => {
+    setTasks(prev => {
+      const updated = prev.map(t => t.id === id ? { ...t, ...updates } : t);
+      memoryStore.tasks = updated;
+      saveMemory();
+      return updated;
+    });
+  }, [saveMemory]);
+
+  // Add file
+  const addFile = useCallback((path: string, content: string, language: string = 'almarjaa') => {
+    setFiles(prev => {
+      const existing = prev.findIndex(f => f.path === path);
+      let updated: ProjectFile[];
+      if (existing >= 0) {
+        updated = [...prev];
+        updated[existing] = { path, content, language };
+      } else {
+        updated = [...prev, { path, content, language }];
+      }
+      memoryStore.files = updated;
+      saveMemory();
+      return updated;
+    });
+  }, [saveMemory]);
 
   // Send message
   const handleSend = useCallback(async () => {
-    if (!input.trim() || isAgentThinking) return;
+    if (!input.trim() || isLoading) return;
 
-    // Create conversation if none exists
-    if (!currentConversationId) {
-      createConversation();
-    }
-
-    // Add user message
-    addMessage({
+    const userMessage: Message = {
+      id: `msg_${Date.now()}`,
       role: 'user',
       content: input.trim(),
+      timestamp: new Date(),
+    };
+
+    setMessages(prev => {
+      const updated = [...prev, userMessage];
+      memoryStore.messages = updated;
+      saveMemory();
+      return updated;
     });
 
+    const currentInput = input.trim();
     setInput('');
-    setIsAgentThinking(true);
+    setIsLoading(true);
+
+    // Add initial task
+    const taskId = addTask(`معالجة: ${currentInput.substring(0, 50)}...`, 'high');
+    updateTask(taskId, { status: 'in_progress', progress: 10 });
 
     try {
-      // Call the agent API
-      const response = await fetch('/api/agent/chat', {
+      // Call the agentic task API
+      const response = await fetch('/api/agent/task', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: input.trim() }),
+        body: JSON.stringify({
+          description: currentInput,
+          maxIterations: 5,
+          stream: true,
+        }),
       });
 
-      if (!response.ok) throw new Error('Failed to get response');
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
+      }
 
       const reader = response.body?.getReader();
       if (!reader) throw new Error('No reader available');
 
       const decoder = new TextDecoder();
-      let fullContent = '';
-      let messageId = '';
+      let buffer = '';
+      const steps: ExecutionStep[] = [];
+      let assistantContent = '';
 
-      // Add initial assistant message
-      addMessage({
+      // Add placeholder message
+      const assistantMessage: Message = {
+        id: `msg_${Date.now() + 1}`,
         role: 'assistant',
         content: '',
+        timestamp: new Date(),
         isStreaming: true,
-      });
+        steps: [],
+      };
 
-      // Get the current conversation to find the message we just added
-      const currentConv = useAgentStore.getState().conversations.find(
-        (c) => c.id === useAgentStore.getState().currentConversationId
-      );
-      const lastMessage = currentConv?.messages[currentConv.messages.length - 1];
-      messageId = lastMessage?.id || '';
+      setMessages(prev => [...prev, assistantMessage]);
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        const chunk = decoder.decode(value, { stream: true });
-        fullContent += chunk;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
 
-        // Update the message with new content
-        updateMessage(messageId, { content: fullContent });
+        for (const line of lines) {
+          if (!line.trim()) continue;
+
+          try {
+            const data = JSON.parse(line);
+
+            if (data.type === 'step') {
+              const step: ExecutionStep = {
+                ...data.step,
+                timestamp: new Date(data.step.timestamp),
+              };
+              steps.push(step);
+
+              // Update progress
+              updateTask(taskId, { progress: Math.min(90, steps.length * 15) });
+
+              // Add files from create steps
+              if (step.type === 'create' && step.code && step.filePath) {
+                addFile(step.filePath, step.code);
+              }
+
+              // Update message
+              setMessages(prev => prev.map(m => 
+                m.id === assistantMessage.id 
+                  ? { ...m, steps, content: formatStepsAsContent(steps) }
+                  : m
+              ));
+            } else if (data.type === 'complete') {
+              const result = data.result;
+              if (result.success) {
+                updateTask(taskId, { status: 'completed', progress: 100 });
+                if (result.files) {
+                  result.files.forEach((f: ProjectFile) => addFile(f.path, f.content, f.language));
+                }
+              } else {
+                updateTask(taskId, { status: 'failed', progress: 100 });
+              }
+
+              setMessages(prev => prev.map(m => 
+                m.id === assistantMessage.id 
+                  ? { ...m, isStreaming: false, content: formatStepsAsContent(steps) }
+                  : m
+              ));
+            } else if (data.type === 'error') {
+              updateTask(taskId, { status: 'failed', progress: 100 });
+              setMessages(prev => prev.map(m => 
+                m.id === assistantMessage.id 
+                  ? { ...m, isStreaming: false, content: `خطأ: ${data.error}` }
+                  : m
+              ));
+            }
+          } catch {
+            // Skip invalid JSON
+          }
+        }
       }
 
-      // Mark streaming as complete
-      updateMessage(messageId, { isStreaming: false });
+      // Save final state
+      saveMemory();
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Chat error:', error);
-      addMessage({
+      updateTask(taskId, { status: 'failed', progress: 100 });
+      
+      const errorMessage: Message = {
+        id: `msg_${Date.now() + 2}`,
         role: 'assistant',
-        content: 'عذراً، حدث خطأ في معالجة طلبك. يرجى المحاولة مرة أخرى.',
-      });
+        content: `عذراً، حدث خطأ: ${error.message}\n\nسأحاول مساعدتك بطريقة أخرى. يمكنني:\n1. كتابة كود لغة المرجع\n2. إنشاء ملفات جديدة\n3. شرح الكود\n\nحاول مرة أخرى بصيغة مختلفة.`,
+        timestamp: new Date(),
+      };
+
+      setMessages(prev => [...prev, errorMessage]);
     } finally {
-      setIsAgentThinking(false);
+      setIsLoading(false);
     }
-  }, [input, isAgentThinking, currentConversationId, addMessage, updateMessage, setIsAgentThinking, createConversation]);
+  }, [input, isLoading, addTask, updateTask, addFile, saveMemory]);
+
+  // Format steps as readable content
+  const formatStepsAsContent = (steps: ExecutionStep[]): string => {
+    if (steps.length === 0) return '';
+    
+    let content = '';
+    const createSteps = steps.filter(s => s.type === 'create');
+    const successSteps = steps.filter(s => s.type === 'success');
+    const errorSteps = steps.filter(s => s.type === 'error');
+    
+    if (successSteps.length > 0) {
+      content += '✅ **تم إنجاز المهمة بنجاح!**\n\n';
+    }
+    
+    if (createSteps.length > 0) {
+      content += '### 📁 الملفات المُنشأة:\n';
+      createSteps.forEach(s => {
+        if (s.filePath) {
+          content += `- \`${s.filePath}\`\n`;
+        }
+      });
+      content += '\n';
+    }
+    
+    if (errorSteps.length > 0 && successSteps.length === 0) {
+      content += '### ⚠️ ملاحظات:\n';
+      errorSteps.forEach(s => {
+        content += `- ${s.content}\n`;
+      });
+    }
+    
+    return content;
+  };
 
   // Copy to clipboard
   const copyToClipboard = (text: string, id: string) => {
@@ -147,12 +363,6 @@ export function ChatArea() {
 
   // Execute code
   const executeCode = async (code: string, language: string) => {
-    setTerminalOpen(true);
-    addTerminalLine({
-      type: 'input',
-      content: `Executing ${language} code...`,
-    });
-
     try {
       const response = await fetch('/api/agent/execute', {
         method: 'POST',
@@ -161,23 +371,9 @@ export function ChatArea() {
       });
 
       const result = await response.json();
-
-      if (result.success) {
-        addTerminalLine({
-          type: 'output',
-          content: result.output || 'تم التنفيذ بنجاح',
-        });
-      } else {
-        addTerminalLine({
-          type: 'error',
-          content: result.error || 'حدث خطأ في التنفيذ',
-        });
-      }
+      return result;
     } catch (error: any) {
-      addTerminalLine({
-        type: 'error',
-        content: error.message || 'خطأ في الاتصال',
-      });
+      return { success: false, error: error.message };
     }
   };
 
@@ -191,13 +387,17 @@ export function ChatArea() {
 
   return (
     <div className="h-full flex flex-col" dir="rtl">
-      {/* Messages Area */}
-      <ScrollArea className="flex-1">
+      {/* Messages Area - Fixed scrolling */}
+      <div 
+        ref={scrollContainerRef}
+        className="flex-1 overflow-y-auto overflow-x-hidden"
+        style={{ scrollBehavior: 'smooth' }}
+      >
         <div className="max-w-4xl mx-auto p-4">
           {messages.length === 0 ? (
-            <WelcomeScreen />
+            <WelcomeScreen onSuggestionClick={setInput} />
           ) : (
-            <div className="space-y-6">
+            <div className="space-y-6 pb-4">
               {messages.map((message) => (
                 <MessageBubble
                   key={message.id}
@@ -207,14 +407,48 @@ export function ChatArea() {
                   onExecute={executeCode}
                 />
               ))}
-              {isAgentThinking && messages[messages.length - 1]?.role !== 'assistant' && (
+              {isLoading && messages[messages.length - 1]?.role !== 'assistant' && (
                 <TypingIndicator />
               )}
-              <div ref={messagesEndRef} />
+              <div ref={messagesEndRef} className="h-4" />
             </div>
           )}
         </div>
-      </ScrollArea>
+      </div>
+
+      {/* Tasks Preview */}
+      {tasks.filter(t => t.status === 'in_progress').length > 0 && (
+        <div className="border-t border-border bg-muted/30 px-4 py-2">
+          <div className="max-w-4xl mx-auto flex items-center gap-3">
+            <Loader2 className="h-4 w-4 animate-spin text-primary" />
+            <span className="text-sm">المهام النشطة:</span>
+            {tasks.filter(t => t.status === 'in_progress').map(task => (
+              <Badge key={task.id} variant="outline" className="text-xs">
+                {task.content.substring(0, 30)}...
+                <span className="mr-2">{task.progress}%</span>
+              </Badge>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Files Preview */}
+      {files.length > 0 && (
+        <div className="border-t border-border bg-muted/20 px-4 py-2">
+          <div className="max-w-4xl mx-auto flex items-center gap-2 flex-wrap">
+            <Folder className="h-4 w-4 text-primary" />
+            <span className="text-sm text-muted-foreground">الملفات:</span>
+            {files.slice(0, 5).map(file => (
+              <Badge key={file.path} variant="secondary" className="text-xs">
+                {file.path}
+              </Badge>
+            ))}
+            {files.length > 5 && (
+              <Badge variant="outline" className="text-xs">+{files.length - 5}</Badge>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Input Area */}
       <div className="border-t border-border bg-background/80 backdrop-blur-sm p-4 shrink-0">
@@ -225,16 +459,16 @@ export function ChatArea() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="اكتب رسالتك هنا... (Enter للإرسال، Shift+Enter لسطر جديد)"
+              placeholder="اكتب وصف المشروع... مثال: أنشئ برنامج حاسبة بلغة المرجع"
               className="min-h-[52px] max-h-[200px] resize-none bg-muted/50 border-border focus-visible:ring-primary/50 pr-4 pl-12"
-              disabled={isAgentThinking}
+              disabled={isLoading}
             />
             <Button
               onClick={handleSend}
-              disabled={!input.trim() || isAgentThinking}
+              disabled={!input.trim() || isLoading}
               className="absolute left-2 bottom-2 h-9 w-9 p-0 bg-primary hover:bg-primary/90 rounded-lg"
             >
-              {isAgentThinking ? (
+              {isLoading ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <Send className="h-4 w-4" />
@@ -242,7 +476,7 @@ export function ChatArea() {
             </Button>
           </div>
           <p className="text-xs text-muted-foreground mt-2 text-center">
-            يمكن للوكيل تنفيذ الأوامر وإنشاء الملفات وتصحيح الأخطاء تلقائياً
+            الوكيل ينشئ الملفات، ينفذها، ويصلح الأخطاء تلقائياً
           </p>
         </div>
       </div>
@@ -251,14 +485,12 @@ export function ChatArea() {
 }
 
 // Welcome Screen Component
-function WelcomeScreen() {
-  const { createConversation } = useAgentStore();
-  
+function WelcomeScreen({ onSuggestionClick }: { onSuggestionClick: (text: string) => void }) {
   const suggestions = [
-    { icon: Code, text: 'اكتب برنامج حاسبة', desc: 'برنامج جمع وطرح وضرب وقسمة' },
-    { icon: FileCode, text: 'أنشئ تطبيق ويب', desc: 'تطبيق React مع Tailwind' },
-    { icon: Sparkles, text: 'حلل كود معين', desc: 'تحليل وتحسين الكود' },
-    { icon: RefreshCw, text: 'أصلح الأخطاء', desc: 'تصحيح وتحسين الكود' },
+    { icon: Code, text: 'أنشئ برنامج حاسبة بلغة المرجع', desc: 'جمع، طرح، ضرب، قسمة' },
+    { icon: FileCode, text: 'أنشئ لعبة تخمين الأرقام', desc: 'لعبة تفاعلية' },
+    { icon: Sparkles, text: 'أنشئ نظام إدارة مهام', desc: 'إضافة وعرض المهام' },
+    { icon: Terminal, text: 'أنشئ برنامج ترتيب قائمة', desc: 'خوارزمية ترتيب' },
   ];
 
   return (
@@ -268,20 +500,19 @@ function WelcomeScreen() {
       </div>
       
       <h1 className="text-3xl font-bold mb-3">
-        <span className="gradient-text">وكيل المرجع الذكي</span>
+        <span className="bg-gradient-to-l from-primary to-emerald-400 bg-clip-text text-transparent">
+          وكيل المرجع الذكي
+        </span>
       </h1>
       <p className="text-muted-foreground max-w-lg mb-8 leading-relaxed">
-        مساعد ذكي متكامل للبرمجة والتطوير. يمكنه كتابة الكود، تنفيذه، وتصحيح الأخطاء تلقائياً.
+        وكيل ذكي ينشئ الملفات، ينفذها بلغة المرجع الحقيقية، ويصلح الأخطاء تلقائياً.
       </p>
 
       <div className="grid grid-cols-2 gap-3 max-w-md">
         {suggestions.map((suggestion, index) => (
           <button
             key={index}
-            onClick={() => {
-              createConversation();
-              // Auto-focus input would happen naturally
-            }}
+            onClick={() => onSuggestionClick(suggestion.text)}
             className="flex flex-col items-start p-4 rounded-xl bg-muted/30 hover:bg-muted/50 border border-border hover:border-primary/30 transition-all text-right group"
           >
             <suggestion.icon className="h-5 w-5 text-primary mb-2 group-hover:scale-110 transition-transform" />
@@ -303,9 +534,9 @@ function TypingIndicator() {
       </div>
       <div className="bg-muted/50 rounded-2xl rounded-tr-sm px-4 py-3">
         <div className="flex items-center gap-1">
-          <span className="w-2 h-2 rounded-full bg-primary typing-dot" />
-          <span className="w-2 h-2 rounded-full bg-primary typing-dot" />
-          <span className="w-2 h-2 rounded-full bg-primary typing-dot" />
+          <span className="w-2 h-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '0ms' }} />
+          <span className="w-2 h-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '150ms' }} />
+          <span className="w-2 h-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '300ms' }} />
         </div>
       </div>
     </div>
@@ -313,14 +544,17 @@ function TypingIndicator() {
 }
 
 // Message Bubble Component
-interface MessageBubbleProps {
-  message: Message;
-  copiedId: string | null;
+function MessageBubble({ 
+  message, 
+  copiedId, 
+  onCopy, 
+  onExecute 
+}: { 
+  message: Message; 
+  copiedId: string | null; 
   onCopy: (text: string, id: string) => void;
-  onExecute: (code: string, language: string) => void;
-}
-
-function MessageBubble({ message, copiedId, onCopy, onExecute }: MessageBubbleProps) {
+  onExecute: (code: string, language: string) => Promise<any>;
+}) {
   const isUser = message.role === 'user';
 
   return (
@@ -338,20 +572,15 @@ function MessageBubble({ message, copiedId, onCopy, onExecute }: MessageBubblePr
       </div>
 
       {/* Content */}
-      <div className={cn(
-        "max-w-[85%] space-y-2",
-        isUser && "text-left"
-      )}>
+      <div className={cn("max-w-[85%] space-y-2", isUser && "text-left")}>
         <div className={cn(
           "rounded-2xl px-4 py-3",
-          isUser 
-            ? "bg-blue-500/10 rounded-tr-sm" 
-            : "bg-muted/50 rounded-tr-sm"
+          isUser ? "bg-blue-500/10 rounded-tr-sm" : "bg-muted/50 rounded-tr-sm"
         )}>
           {isUser ? (
             <p className="text-sm whitespace-pre-wrap">{message.content}</p>
           ) : (
-            <div className="markdown-content prose prose-sm prose-invert max-w-none">
+            <div className="prose prose-sm prose-invert max-w-none">
               <ReactMarkdown
                 components={{
                   code({ className, children, ...props }) {
@@ -383,6 +612,15 @@ function MessageBubble({ message, copiedId, onCopy, onExecute }: MessageBubblePr
               >
                 {message.content}
               </ReactMarkdown>
+              
+              {/* Show execution steps */}
+              {message.steps && message.steps.length > 0 && (
+                <div className="mt-4 space-y-2">
+                  {message.steps.map((step) => (
+                    <StepIndicator key={step.id} step={step} />
+                  ))}
+                </div>
+              )}
             </div>
           )}
           
@@ -392,10 +630,7 @@ function MessageBubble({ message, copiedId, onCopy, onExecute }: MessageBubblePr
         </div>
 
         {/* Timestamp */}
-        <p className={cn(
-          "text-[10px] text-muted-foreground",
-          isUser ? "text-left" : "text-right"
-        )}>
+        <p className={cn("text-[10px] text-muted-foreground", isUser ? "text-left" : "text-right")}>
           {new Date(message.timestamp).toLocaleTimeString('ar-SA', {
             hour: '2-digit',
             minute: '2-digit',
@@ -406,16 +641,38 @@ function MessageBubble({ message, copiedId, onCopy, onExecute }: MessageBubblePr
   );
 }
 
-// Code Block Component
-interface CodeBlockComponentProps {
-  code: string;
-  language: string;
-  id: string;
-  copiedId: string | null;
-  onCopy: (text: string, id: string) => void;
-  onExecute: (code: string, language: string) => void;
+// Step Indicator Component
+function StepIndicator({ step }: { step: ExecutionStep }) {
+  const icons = {
+    think: '🧠',
+    create: '📄',
+    execute: '⚡',
+    fix: '🔧',
+    success: '✅',
+    error: '❌',
+    info: 'ℹ️',
+  };
+
+  return (
+    <div className={cn(
+      "flex items-start gap-2 p-2 rounded-lg text-xs",
+      step.type === 'success' && "bg-green-500/10",
+      step.type === 'error' && "bg-red-500/10",
+      step.type === 'create' && "bg-blue-500/10",
+    )}>
+      <span>{icons[step.type]}</span>
+      <div>
+        <p className="font-medium">{step.title}</p>
+        <p className="text-muted-foreground">{step.content}</p>
+        {step.filePath && (
+          <Badge variant="outline" className="text-[10px] mt-1">{step.filePath}</Badge>
+        )}
+      </div>
+    </div>
+  );
 }
 
+// Code Block Component
 function CodeBlockComponent({
   code,
   language,
@@ -423,7 +680,30 @@ function CodeBlockComponent({
   copiedId,
   onCopy,
   onExecute,
-}: CodeBlockComponentProps) {
+}: {
+  code: string;
+  language: string;
+  id: string;
+  copiedId: string | null;
+  onCopy: (text: string, id: string) => void;
+  onExecute: (code: string, language: string) => Promise<any>;
+}) {
+  const [executing, setExecuting] = useState(false);
+  const [result, setResult] = useState<{ success: boolean; output?: string; error?: string } | null>(null);
+
+  const handleExecute = async () => {
+    setExecuting(true);
+    setResult(null);
+    try {
+      const res = await onExecute(code, language);
+      setResult(res);
+    } catch (e: any) {
+      setResult({ success: false, error: e.message });
+    } finally {
+      setExecuting(false);
+    }
+  };
+
   return (
     <div className="relative group my-2 rounded-lg overflow-hidden border border-border bg-background">
       {/* Header */}
@@ -437,9 +717,14 @@ function CodeBlockComponent({
             variant="ghost"
             size="sm"
             className="h-7 px-2 text-xs hover:bg-primary/10 hover:text-primary"
-            onClick={() => onExecute(code, language)}
+            onClick={handleExecute}
+            disabled={executing}
           >
-            <Play className="h-3 w-3 ml-1" />
+            {executing ? (
+              <Loader2 className="h-3 w-3 ml-1 animate-spin" />
+            ) : (
+              <Play className="h-3 w-3 ml-1" />
+            )}
             تنفيذ
           </Button>
           <Button
@@ -459,22 +744,33 @@ function CodeBlockComponent({
       
       {/* Code */}
       <SyntaxHighlighter
-        language={language}
+        language={language === 'almarjaa' ? 'javascript' : language}
         style={vscDarkPlus}
         customStyle={{
           margin: 0,
           padding: '1rem',
           fontSize: '0.875rem',
           background: 'transparent',
-        }}
-        codeTagProps={{
-          style: {
-            fontFamily: 'Geist Mono, monospace',
-          },
+          maxHeight: '400px',
+          overflow: 'auto',
         }}
       >
         {code}
       </SyntaxHighlighter>
+
+      {/* Execution Result */}
+      {result && (
+        <div className={cn(
+          "border-t border-border p-3 text-xs font-mono",
+          result.success ? "bg-green-500/5" : "bg-red-500/5"
+        )}>
+          {result.success ? (
+            <pre className="text-green-400 whitespace-pre-wrap">{result.output}</pre>
+          ) : (
+            <pre className="text-red-400 whitespace-pre-wrap">{result.error}</pre>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -1,24 +1,14 @@
 'use client';
 
 /**
- * وكيل المرجع الذكي - واجهة شاملة
- * Comprehensive AI Agent Interface similar to Z.AI Agent
- * 
- * Features:
- * - Sidebar with conversation history
- * - Chat area with markdown support
- * - Todo panel for task management
- * - Terminal panel
- * - File manager
- * - GitHub integration
- * - Floating windows
- * 
- * © 2026 رضوان دالي حمدوني - All Rights Reserved
+ * وكيل المرجع الذكي - واجهة شاملة مصلحة
+ * Professional AI Agent Interface with proper scrolling
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   ResizableHandle,
   ResizablePanel,
@@ -27,21 +17,22 @@ import {
 import { cn } from '@/lib/utils';
 import {
   Bot,
-  Zap,
-  Menu,
   PanelLeftClose,
   PanelLeft,
-  Settings,
   Terminal as TerminalIcon,
   FolderOpen,
   Github,
   Plus,
   CheckCircle,
-  XCircle,
   Loader2,
+  Menu,
+  Download,
+  Trash2,
+  Settings,
+  ListTodo,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
-import { useAgentStore } from '@/lib/agent-store';
-import { AgentSidebar } from '@/components/agent/agent-sidebar';
 import { ChatArea } from '@/components/agent/chat-area';
 import { TodoPanel } from '@/components/agent/todo-panel';
 import { TerminalPanel } from '@/components/agent/terminal-panel';
@@ -49,59 +40,154 @@ import { FloatingWindowsContainer, MinimizedWindowsBar } from '@/components/agen
 
 export default function AgentInterface() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  
-  const {
-    theme,
-    toggleTheme,
-    sidebarOpen,
-    todoPanelOpen,
-    toggleSidebar,
-    toggleTodoPanel,
-    terminalOpen,
-    openFloatingWindow,
-    isAgentThinking,
-    tasks,
-    createConversation,
-  } = useAgentStore();
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [todoPanelOpen, setTodoPanelOpen] = useState(true);
+  const [terminalOpen, setTerminalOpen] = useState(false);
+  const [terminalHeight, setTerminalHeight] = useState(200);
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  const [tasks, setTasks] = useState<Array<{
+    id: string;
+    content: string;
+    status: 'pending' | 'in_progress' | 'completed' | 'failed';
+    priority: 'high' | 'medium' | 'low';
+    progress: number;
+  }>>([]);
+  const [files, setFiles] = useState<Array<{ path: string; content: string; language: string }>>([]);
+  const [isAgentThinking, setIsAgentThinking] = useState(false);
+  const [conversations, setConversations] = useState<Array<{
+    id: string;
+    title: string;
+    messages: Array<any>;
+  }>>([]);
+  const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
+  const [floatingWindows, setFloatingWindows] = useState<Array<any>>([]);
 
-  // Apply theme to document
+  // Apply theme
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
   }, [theme]);
 
+  // Load from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem('agent-state');
+    if (saved) {
+      try {
+        const data = JSON.parse(saved);
+        setTasks(data.tasks || []);
+        setFiles(data.files || []);
+        setConversations(data.conversations || []);
+      } catch {}
+    }
+  }, []);
+
+  // Save to localStorage
+  useEffect(() => {
+    localStorage.setItem('agent-state', JSON.stringify({
+      tasks,
+      files,
+      conversations
+    }));
+  }, [tasks, files, conversations]);
+
   // Task counts
   const taskCounts = {
     total: tasks.length,
-    completed: tasks.filter((t) => t.status === 'completed').length,
-    inProgress: tasks.filter((t) => t.status === 'in_progress').length,
+    completed: tasks.filter(t => t.status === 'completed').length,
+    inProgress: tasks.filter(t => t.status === 'in_progress').length,
+  };
+
+  // Create conversation
+  const createConversation = () => {
+    const newConv = {
+      id: `conv_${Date.now()}`,
+      title: 'محادثة جديدة',
+      messages: []
+    };
+    setConversations(prev => [newConv, ...prev]);
+    setCurrentConversationId(newConv.id);
+  };
+
+  // Open floating window
+  const openFloatingWindow = (type: string, title: string) => {
+    const newWindow = {
+      id: `win_${Date.now()}`,
+      type,
+      title,
+      x: 100 + Math.random() * 200,
+      y: 100 + Math.random() * 100,
+      width: type === 'terminal' ? 600 : 500,
+      height: type === 'terminal' ? 400 : 400,
+      isMinimized: false,
+      isMaximized: false,
+      zIndex: floatingWindows.length + 1
+    };
+    setFloatingWindows(prev => [...prev, newWindow]);
+  };
+
+  // Close floating window
+  const closeFloatingWindow = (id: string) => {
+    setFloatingWindows(prev => prev.filter(w => w.id !== id));
+  };
+
+  // Download project
+  const downloadProject = async () => {
+    try {
+      const response = await fetch('/api/agent/task?action=download');
+      if (!response.ok) throw new Error('فشل التنزيل');
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'almarjaa-project.zip';
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Download error:', error);
+    }
+  };
+
+  // Clear sandbox
+  const clearSandbox = async () => {
+    if (!confirm('هل أنت متأكد من مسح جميع الملفات؟')) return;
+    
+    try {
+      await fetch('/api/agent/task', { method: 'DELETE' });
+      setFiles([]);
+      setTasks([]);
+    } catch (error) {
+      console.error('Clear error:', error);
+    }
   };
 
   return (
     <div className="h-screen flex flex-col bg-background text-foreground overflow-hidden" dir="rtl">
       {/* Header */}
-      <header className="flex items-center justify-between px-4 py-2 border-b border-border bg-background/80 backdrop-blur-md shrink-0">
+      <header className="flex items-center justify-between px-4 py-2 border-b border-border bg-background/95 backdrop-blur-md shrink-0 z-50">
         <div className="flex items-center gap-3">
           {/* Menu Toggle */}
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            onClick={() => setSidebarOpen(!sidebarOpen)}
             className="hover:bg-primary/10 hover:text-primary"
           >
-            {sidebarCollapsed ? <PanelLeft className="h-5 w-5" /> : <PanelLeftClose className="h-5 w-5" />}
+            {sidebarOpen ? <PanelLeftClose className="h-5 w-5" /> : <PanelLeft className="h-5 w-5" />}
           </Button>
 
           {/* Logo */}
           <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary via-emerald-400 to-cyan-500 flex items-center justify-center shadow-lg shadow-primary/20">
-              <Bot className="h-6 w-6 text-primary-foreground" />
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 via-teal-500 to-cyan-600 flex items-center justify-center shadow-lg shadow-emerald-500/20">
+              <Bot className="h-6 w-6 text-white" />
             </div>
             <div>
-              <h1 className="text-lg font-bold gradient-text">وكيل المرجع الذكي</h1>
+              <h1 className="text-lg font-bold bg-gradient-to-l from-emerald-400 via-teal-300 to-cyan-400 bg-clip-text text-transparent">
+                وكيل المرجع الذكي
+              </h1>
               <p className="text-xs text-muted-foreground">نظام Agentic متكامل</p>
             </div>
           </div>
-          <Badge variant="outline" className="text-primary border-primary/30 bg-primary/10 text-xs">
+          <Badge variant="outline" className="text-emerald-400 border-emerald-500/30 bg-emerald-500/10 text-xs">
             v3.4.0
           </Badge>
         </div>
@@ -119,15 +205,15 @@ export default function AgentInterface() {
             محادثة جديدة
           </Button>
 
-          {/* Open Terminal */}
+          {/* Toggle Terminal */}
           <Button
             variant="ghost"
             size="sm"
             className="gap-2 hover:bg-primary/10 hover:text-primary"
-            onClick={() => openFloatingWindow('terminal', 'الطرفية')}
+            onClick={() => setTerminalOpen(!terminalOpen)}
           >
             <TerminalIcon className="h-4 w-4" />
-            الطرفية
+            {terminalOpen ? 'إخفاء الطرفية' : 'الطرفية'}
           </Button>
 
           {/* Open File Manager */}
@@ -151,6 +237,29 @@ export default function AgentInterface() {
             <Github className="h-4 w-4" />
             GitHub
           </Button>
+
+          {/* Download */}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="gap-2 hover:bg-primary/10 hover:text-primary"
+            onClick={downloadProject}
+            disabled={files.length === 0}
+          >
+            <Download className="h-4 w-4" />
+            تنزيل
+          </Button>
+
+          {/* Clear */}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="gap-2 text-red-400 hover:text-red-300 hover:bg-red-500/10"
+            onClick={clearSandbox}
+          >
+            <Trash2 className="h-4 w-4" />
+            مسح
+          </Button>
         </div>
 
         {/* Status */}
@@ -172,12 +281,12 @@ export default function AgentInterface() {
           <div className="flex items-center gap-2">
             {isAgentThinking ? (
               <>
-                <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                <Loader2 className="h-4 w-4 animate-spin text-emerald-400" />
                 <span className="text-sm text-muted-foreground">يعمل...</span>
               </>
             ) : (
               <>
-                <div className="w-2 h-2 rounded-full bg-primary pulse-glow" />
+                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-lg shadow-emerald-500/50" />
                 <span className="text-sm text-muted-foreground">جاهز</span>
               </>
             )}
@@ -193,14 +302,89 @@ export default function AgentInterface() {
           {todoPanelOpen && (
             <>
               <ResizablePanel defaultSize={18} minSize={15} maxSize={25}>
-                <TodoPanel />
+                <div className="h-full flex flex-col border-l border-border bg-muted/20">
+                  {/* Header */}
+                  <div className="flex items-center justify-between px-3 py-2 border-b border-border shrink-0">
+                    <span className="text-sm font-medium flex items-center gap-2">
+                      <ListTodo className="h-4 w-4 text-primary" />
+                      المهام
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6"
+                      onClick={() => setTodoPanelOpen(false)}
+                    >
+                      <ChevronUp className="h-3 w-3" />
+                    </Button>
+                  </div>
+                  
+                  {/* Tasks List */}
+                  <ScrollArea className="flex-1">
+                    <div className="p-2 space-y-2">
+                      {tasks.length === 0 ? (
+                        <div className="text-center text-muted-foreground text-sm py-8">
+                          <ListTodo className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                          لا توجد مهام
+                        </div>
+                      ) : (
+                        tasks.map(task => (
+                          <div
+                            key={task.id}
+                            className={cn(
+                              "p-2 rounded-lg border text-xs",
+                              task.status === 'completed' && "bg-green-500/10 border-green-500/30",
+                              task.status === 'in_progress' && "bg-yellow-500/10 border-yellow-500/30",
+                              task.status === 'failed' && "bg-red-500/10 border-red-500/30",
+                              task.status === 'pending' && "bg-muted/30 border-border"
+                            )}
+                          >
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="font-medium truncate">{task.content.substring(0, 30)}...</span>
+                              <Badge variant="outline" className="text-[10px]">{task.progress}%</Badge>
+                            </div>
+                            {/* Progress bar */}
+                            <div className="h-1 bg-muted rounded-full overflow-hidden">
+                              <div 
+                                className={cn(
+                                  "h-full transition-all",
+                                  task.status === 'completed' && "bg-green-500",
+                                  task.status === 'in_progress' && "bg-yellow-500",
+                                  task.status === 'failed' && "bg-red-500"
+                                )}
+                                style={{ width: `${task.progress}%` }}
+                              />
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </ScrollArea>
+
+                  {/* Files Preview */}
+                  {files.length > 0 && (
+                    <div className="border-t border-border p-2 shrink-0">
+                      <span className="text-xs text-muted-foreground mb-2 block">الملفات ({files.length})</span>
+                      <div className="space-y-1">
+                        {files.slice(0, 3).map(file => (
+                          <Badge key={file.path} variant="outline" className="text-[10px] w-full justify-start truncate">
+                            {file.path}
+                          </Badge>
+                        ))}
+                        {files.length > 3 && (
+                          <span className="text-[10px] text-muted-foreground">+{files.length - 3} المزيد</span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </ResizablePanel>
               <ResizableHandle className="w-1 bg-border hover:bg-primary/50 transition-colors cursor-col-resize" />
             </>
           )}
 
           {/* Chat Area (Center) */}
-          <ResizablePanel defaultSize={todoPanelOpen ? (sidebarOpen ? 58 : 76) : (sidebarOpen ? 72 : 100)}>
+          <ResizablePanel defaultSize={todoPanelOpen ? (sidebarOpen ? 64 : 82) : (sidebarOpen ? 78 : 100)}>
             <div className="h-full flex flex-col">
               {/* Chat */}
               <div className="flex-1 overflow-hidden">
@@ -208,7 +392,14 @@ export default function AgentInterface() {
               </div>
               
               {/* Terminal */}
-              <TerminalPanel />
+              {terminalOpen && (
+                <div 
+                  className="border-t border-border bg-background shrink-0"
+                  style={{ height: terminalHeight }}
+                >
+                  <TerminalPanel />
+                </div>
+              )}
             </div>
           </ResizablePanel>
 
@@ -216,11 +407,63 @@ export default function AgentInterface() {
           {sidebarOpen && (
             <>
               <ResizableHandle className="w-1 bg-border hover:bg-primary/50 transition-colors cursor-col-resize" />
-              <ResizablePanel defaultSize={22} minSize={18} maxSize={30}>
-                <AgentSidebar 
-                  collapsed={sidebarCollapsed} 
-                  onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} 
-                />
+              <ResizablePanel defaultSize={18} minSize={15} maxSize={25}>
+                <div className="h-full flex flex-col border-r border-border bg-muted/20">
+                  {/* Header */}
+                  <div className="flex items-center justify-between px-3 py-2 border-b border-border shrink-0">
+                    <span className="text-sm font-medium">المحادثات</span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6"
+                      onClick={createConversation}
+                    >
+                      <Plus className="h-3 w-3" />
+                    </Button>
+                  </div>
+                  
+                  {/* Conversations List */}
+                  <ScrollArea className="flex-1">
+                    <div className="p-2 space-y-1">
+                      {conversations.length === 0 ? (
+                        <div className="text-center text-muted-foreground text-sm py-8">
+                          <Bot className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                          لا توجد محادثات
+                          <br />
+                          <span className="text-xs">ابدأ محادثة جديدة</span>
+                        </div>
+                      ) : (
+                        conversations.map(conv => (
+                          <button
+                            key={conv.id}
+                            onClick={() => setCurrentConversationId(conv.id)}
+                            className={cn(
+                              "w-full text-right p-2 rounded-lg text-sm transition-colors",
+                              currentConversationId === conv.id
+                                ? "bg-primary/20 text-primary"
+                                : "hover:bg-muted/50"
+                            )}
+                          >
+                            {conv.title}
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </ScrollArea>
+
+                  {/* Settings */}
+                  <div className="border-t border-border p-2 shrink-0">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full justify-start gap-2"
+                      onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                    >
+                      <Settings className="h-4 w-4" />
+                      {theme === 'dark' ? 'الوضع الفاتح' : 'الوضع الداكن'}
+                    </Button>
+                  </div>
+                </div>
               </ResizablePanel>
             </>
           )}
@@ -229,24 +472,20 @@ export default function AgentInterface() {
       </div>
 
       {/* Status Bar */}
-      <footer className="flex items-center justify-between px-4 py-1.5 border-t border-border bg-background/80 backdrop-blur-sm text-xs text-muted-foreground shrink-0">
+      <footer className="flex items-center justify-between px-4 py-1.5 border-t border-border bg-background/95 backdrop-blur-sm text-xs text-muted-foreground shrink-0">
         <div className="flex items-center gap-4">
           <span className="flex items-center gap-1.5">
             <span className={cn(
               "w-2 h-2 rounded-full shadow-lg",
-              isAgentThinking ? "bg-yellow-500 animate-pulse shadow-yellow-500/50" : "bg-primary shadow-primary/50"
+              isAgentThinking ? "bg-yellow-500 animate-pulse shadow-yellow-500/50" : "bg-emerald-500 shadow-emerald-500/50"
             )} />
             {isAgentThinking ? "يعمل..." : "جاهز"}
           </span>
           <span>لغة المرجع v3.4.0</span>
           <span className="text-border">|</span>
+          <span>{files.length} ملفات</span>
+          <span className="text-border">|</span>
           <span>{tasks.length} مهام</span>
-          {taskCounts.inProgress > 0 && (
-            <>
-              <span className="text-border">|</span>
-              <span className="text-yellow-400">{taskCounts.inProgress} قيد التنفيذ</span>
-            </>
-          )}
         </div>
         
         <div className="flex items-center gap-4">
@@ -254,17 +493,9 @@ export default function AgentInterface() {
             variant="ghost"
             size="sm"
             className="h-6 text-xs hover:bg-primary/10 hover:text-primary"
-            onClick={toggleTodoPanel}
+            onClick={() => setTodoPanelOpen(!todoPanelOpen)}
           >
             {todoPanelOpen ? 'إخفاء المهام' : 'إظهار المهام'}
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 text-xs hover:bg-primary/10 hover:text-primary"
-            onClick={toggleSidebar}
-          >
-            {sidebarOpen ? 'إخفاء الشريط' : 'إظهار الشريط'}
           </Button>
           <span className="text-border">|</span>
           <span>© 2026 رضوان دالي حمدوني</span>
