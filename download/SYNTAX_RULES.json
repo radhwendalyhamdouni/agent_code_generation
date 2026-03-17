@@ -1,0 +1,476 @@
+{
+  "language_name": "Al-Marjaa",
+  "language_version": "3.2.0",
+  "file_extension": ".mrj",
+  "description": "لغة برمجة عربية حديثة مبنية باستخدام Rust",
+
+  "keywords": {
+    "functions": {
+      "primary": ["دالة"],
+      "alias": ["fn"],
+      "return": ["أرجع", "ارجع", "return"],
+      "lambda": ["لامدا", "دالة_صغيرة", "lambda"]
+    },
+    "control_flow": {
+      "if": ["إذا", "اذا"],
+      "else_if": ["وإذا", "واذا"],
+      "else": ["وإلا", "والا", "غير_ذلك"],
+      "while": ["طالما"],
+      "for": ["لكل"],
+      "in": ["في"],
+      "break": ["توقف"],
+      "continue": ["أكمل", "اكمل"],
+      "repeat": ["كرر"],
+      "times": ["مرة", "مرات"]
+    },
+    "variables": {
+      "var": ["متغير", "م"],
+      "const": ["ثابت", "ث"]
+    },
+    "values": {
+      "true": ["صح", "true"],
+      "false": ["خطأ", "خطا", "false"],
+      "null": ["لا_شيء", "لاشيء", "null"]
+    },
+    "oop": {
+      "class": ["صنف"],
+      "this": ["هذا"],
+      "new": ["جديد"],
+      "super": ["أصل", "اصل"],
+      "extends": [":"]
+    },
+    "modules": {
+      "import": ["استورد"],
+      "export": ["صدر"],
+      "module": ["وحدة"],
+      "use": ["استخدم"],
+      "from": ["من"],
+      "as": ["بوصف", "كـ", "ك"]
+    },
+    "error_handling": {
+      "try": ["حاول"],
+      "catch": ["امسك"],
+      "finally": ["أخيراً", "اخيراً", "أخيرا", "اخيرا"],
+      "throw": ["ألقِ", "الق"]
+    },
+    "builtins": {
+      "print": ["اطبع", "طبع", "أطبع"],
+      "input": ["ادخل", "دخل"],
+      "typeof": ["نوع", "نوع_من"],
+      "length": ["طول"],
+      "delete": ["احذف"],
+      "assert": ["تأكد", "تاكد"]
+    },
+    "logic": {
+      "and": ["و", "&&"],
+      "or": ["أو", "او", "||"],
+      "not": ["ليس", "!"]
+    },
+    "advanced": {
+      "match": ["طابق"],
+      "case": ["حالة"],
+      "default": ["افتراضي"],
+      "async": ["غير_متزامن"],
+      "await": ["انتظر"],
+      "yield": ["أعطِ", "اعط"],
+      "with": ["مع"],
+      "enum": ["تعداد"],
+      "data": ["بيانات"]
+    },
+    "types": {
+      "number": ["رقم", "عدد"],
+      "string": ["نص"],
+      "boolean": ["منطقي"],
+      "list": ["قائمة"],
+      "dict": ["قاموس"]
+    },
+    "ai": {
+      "onnx": ["أونكس", "onnx"],
+      "model": ["نموذج"],
+      "load": ["حمّل", "حمل"],
+      "save": ["احفظ", "حفظ"],
+      "infer": ["استدل", "استدلال"],
+      "tensor": ["موتر"],
+      "shape": ["شكل"],
+      "layer": ["طبقة"],
+      "dense": ["كثيف", "خطي"],
+      "conv": ["التفاف", "conv"],
+      "pool": ["تجميع", "pool"],
+      "dropout": ["إسقاط", "اسقاط"],
+      "flatten": ["تسوية", "flatten"],
+      "reshape": ["إعادة_تشكيل", "reshape"],
+      "activation": ["تنشيط"],
+      "softmax": ["سوفت_ماكس", "softmax"],
+      "relu": ["ريلو", "relu"],
+      "sigmoid": ["سيجمويد", "sigmoid"],
+      "batch": ["دفعة", "batch"],
+      "train": ["درّب", "درب", "تدريب"],
+      "predict": ["توقع", "تنبؤ"],
+      "optimizer": ["محسّن", "محقق"],
+      "loss": ["خسارة"]
+    },
+    "ui_layout": {
+      "row": ["صف", "صف_أفقي"],
+      "column": ["عمود", "صف_عمودي"],
+      "grid": ["شبكة_تخطيط", "شبكة_عرض"],
+      "flex": ["مرن"],
+      "stack": ["كومة"],
+      "wrap": ["التفاف"],
+      "gap": ["فجوة"],
+      "align": ["محاذاة"],
+      "justify": ["تبرير"],
+      "padding": ["حشو"],
+      "margin": ["هامش"]
+    },
+    "ui_components": {
+      "button": ["زر"],
+      "text": ["نص_معروض", "عرض_نص"],
+      "input": ["إدخال", "ادخال"],
+      "select": ["اختيار"],
+      "checkbox": ["خانة"],
+      "radio": ["راديو"],
+      "slider": ["منزلق"],
+      "progress": ["تقدم"],
+      "spinner": ["مؤقت"],
+      "card": ["بطاقة"],
+      "list": ["قائمة"],
+      "table": ["جدول"],
+      "form": ["استمارة", "نموذج_إدخال"],
+      "label": ["تسمية"],
+      "image": ["صورة"],
+      "icon": ["أيقونة", "ايقونة"],
+      "badge": ["شارة"],
+      "avatar": ["صورة_شخصية"],
+      "tooltip": ["تلميح"],
+      "modal": ["نافذة", "نافذة_منبثقة"],
+      "toast": ["تنبيه"],
+      "popup": ["منبثق"]
+    },
+    "ui_themes": {
+      "color": ["لون"],
+      "font": ["خط"],
+      "size": ["حجم"],
+      "width": ["عرض"],
+      "height": ["ارتفاع"],
+      "border": ["حدود"],
+      "shadow": ["ظل"],
+      "background": ["خلفية"]
+    },
+    "ui_charts": {
+      "chart": ["رسم", "رسم_بياني"],
+      "line_chart": ["رسم_خطي"],
+      "bar_chart": ["رسم_أعمدة"],
+      "pie_chart": ["رسم_دائري"],
+      "area_chart": ["رسم_مساحي"]
+    },
+    "ui_animation": {
+      "animate": ["حرك", "حركة"],
+      "transition": ["انتقال"],
+      "duration": ["مدة"],
+      "delay": ["تأخير"],
+      "easing": ["تخفيف"]
+    },
+    "ui_events": {
+      "click": ["نقر"],
+      "change": ["تغيير"],
+      "submit": ["إرسال", "ارسال"],
+      "focus": ["تركيز"],
+      "blur": ["ضبابية"],
+      "hover": ["تحويم"],
+      "scroll": ["تمرير"]
+    },
+    "ui_binding": {
+      "bind": ["ربط"],
+      "observe": ["راقب"],
+      "computed": ["محسوب"],
+      "watch": ["راقب_التغييرات"]
+    }
+  },
+
+  "operators": {
+    "arithmetic": {
+      "plus": {"symbol": "+", "name": "جمع"},
+      "minus": {"symbol": "-", "name": "طرح"},
+      "multiply": {"symbol": "*", "name": "ضرب"},
+      "divide": {"symbol": "/", "name": "قسمة"},
+      "modulo": {"symbol": "%", "name": "باقي"},
+      "power": {"symbol": "^", "name": "أس"},
+      "floor_div": {"symbol": "//", "name": "قسمة_صحيحة"}
+    },
+    "comparison": {
+      "equal": {"symbol": "==", "name": "يساوي"},
+      "not_equal": {"symbol": "!=", "name": "لا_يساوي"},
+      "less": {"symbol": "<", "name": "أصغر"},
+      "greater": {"symbol": ">", "name": "أكبر"},
+      "less_equal": {"symbol": "<=", "name": "أصغر_أو_يساوي"},
+      "greater_equal": {"symbol": ">=", "name": "أكبر_أو_يساوي"}
+    },
+    "assignment": {
+      "assign": {"symbol": "=", "name": "إسناد"},
+      "plus_assign": {"symbol": "+=", "name": "إسناد_جمع"},
+      "minus_assign": {"symbol": "-=", "name": "إسناد_طرح"},
+      "mult_assign": {"symbol": "*=", "name": "إسناد_ضرب"},
+      "div_assign": {"symbol": "/=", "name": "إسناد_قسمة"},
+      "mod_assign": {"symbol": "%=", "name": "إسناد_باقي"},
+      "pow_assign": {"symbol": "^=", "name": "إسناد_أس"}
+    },
+    "logical": {
+      "and": {"symbol": "و", "alt": "&&", "name": "و"},
+      "or": {"symbol": "أو", "alt": "||", "name": "أو"},
+      "not": {"symbol": "ليس", "alt": "!", "name": "ليس"}
+    },
+    "bitwise": {
+      "bit_and": {"symbol": "&", "name": "و_بت"},
+      "bit_or": {"symbol": "|", "name": "أو_بت"},
+      "bit_xor": {"symbol": "~~", "name": "xor_بت"},
+      "bit_not": {"symbol": "~", "name": "نفي_بت"},
+      "shift_left": {"symbol": "<<", "name": "إزاحة_يسار"},
+      "shift_right": {"symbol": ">>", "name": "إزاحة_يمين"}
+    },
+    "advanced": {
+      "null_coalescing": {"symbol": "؟؟", "alt": "??", "name": "دمج_فارغ"},
+      "pipe": {"symbol": "|>", "name": "أنابيب"},
+      "optional_chain": {"symbol": "؟.", "alt": "?.", "name": "وصول_آمن"},
+      "optional_index": {"symbol": "؟[", "name": "فهرسة_آمنة"},
+      "increment": {"symbol": "++", "name": "زيادة"},
+      "decrement": {"symbol": "--", "name": "نقصان"}
+    }
+  },
+
+  "punctuation": {
+    "semicolons": ["؛", ";"],
+    "commas": ["،", ","],
+    "dot": ".",
+    "colon": ":",
+    "arrow": "->",
+    "fat_arrow": "=>",
+    "range": "..",
+    "spread": "...",
+    "question": ["؟", "?"],
+    "at": "@"
+  },
+
+  "brackets": {
+    "parentheses": {"open": "(", "close": ")"},
+    "braces": {"open": "{", "close": "}"},
+    "brackets": {"open": "[", "close": "]"}
+  },
+
+  "regex_patterns": {
+    "identifier": {
+      "pattern": "[\\p{Arabic}\\p{Latin}_][\\p{Arabic}\\p{Latin}\\p{Nd}_ـ]*",
+      "description": "معرف يبدأ بحرف أو شرطة سفلية ويتابع بحروف أو أرقام"
+    },
+    "arabic_number": {
+      "pattern": "[٠-٩]+(\\.[٠-٩]+)?",
+      "description": "رقم عربي شرقي"
+    },
+    "ascii_number": {
+      "pattern": "[0-9]+(\\.[0-9]+)?",
+      "description": "رقم لاتيني"
+    },
+    "hex_number": {
+      "pattern": "0[xX][0-9a-fA-F]+",
+      "description": "رقم سداسي عشر"
+    },
+    "binary_number": {
+      "pattern": "0[bB][01]+",
+      "description": "رقم ثنائي"
+    },
+    "string_double": {
+      "pattern": "\"(?:[^\"\\\\]|\\\\.)*\"",
+      "description": "نص بين علامتي اقتباس مزدوجة"
+    },
+    "string_single": {
+      "pattern": "'(?:[^'\\\\]|\\\\.)*'",
+      "description": "نص بين علامتي اقتباس مفردة"
+    },
+    "string_multiline": {
+      "pattern": "`(?:[^`\\\\]|\\\\.)*`",
+      "description": "نص متعدد الأسطر"
+    },
+    "comment_single": {
+      "pattern": "#[^\\n]*",
+      "description": "تعليق أحادي السطر"
+    },
+    "comment_double_slash": {
+      "pattern": "//[^\\n]*",
+      "description": "تعليق أحادي السطر (نمط C)"
+    },
+    "comment_multi": {
+      "pattern": "/\\*[\\s\\S]*?\\*/",
+      "description": "تعليق متعدد الأسطر"
+    },
+    "whitespace": {
+      "pattern": "[\\s\\t\\n\\r]+",
+      "description": "مسافات بيضاء"
+    }
+  },
+
+  "syntax_rules": {
+    "variable_declaration": {
+      "pattern": "(متغير|م|ثابت|ث)\\s+([\\p{Arabic}\\p{Latin}_][\\p{Arabic}\\p{Latin}\\p{Nd}_ـ]*)\\s*=\\s*(.+)(؛|;)?",
+      "example": "متغير الاسم = \"أحمد\"؛",
+      "description": "إعلان متغير أو ثابت"
+    },
+    "function_declaration": {
+      "pattern": "دالة\\s+([\\p{Arabic}\\p{Latin}_][\\p{Arabic}\\p{Latin}\\p{Nd}_ـ]*)\\s*\\(([^)]*)\\)\\s*\\{",
+      "example": "دالة جمع(أ، ب) { أرجع أ + ب؛ }",
+      "description": "تعريف دالة"
+    },
+    "if_statement": {
+      "pattern": "إذا\\s+(.+)\\s*\\{",
+      "example": "إذا س > ٥ { اطبع(\"كبير\")؛ }",
+      "description": "جملة شرطية"
+    },
+    "while_loop": {
+      "pattern": "طالما\\s+(.+)\\s*\\{",
+      "example": "طالما س < ١٠ { س = س + ١؛ }",
+      "description": "حلقة طالما"
+    },
+    "for_loop": {
+      "pattern": "لكل\\s+([\\p{Arabic}\\p{Latin}_][\\p{Arabic}\\p{Latin}\\p{Nd}_ـ]*)\\s+في\\s+(.+)\\s*\\{",
+      "example": "لكل رقم في [١، ٢، ٣] { اطبع(رقم)؛ }",
+      "description": "حلقة لكل"
+    },
+    "list_literal": {
+      "pattern": "\\[(.*)\\]",
+      "example": "[١، ٢، ٣، ٤، ٥]",
+      "description": "قائمة حرفية"
+    },
+    "dict_literal": {
+      "pattern": "\\{([^\\[\\]]*)\\}",
+      "example": "{الاسم: \"أحمد\"، العمر: ٢٥}",
+      "description": "قاموس حرفي"
+    },
+    "lambda_expression": {
+      "pattern": "\\(([^)]*)\\)\\s*=>\\s*(.+)",
+      "example": "(ن) => ن ^ ٢",
+      "description": "تعبير لامدا"
+    },
+    "list_comprehension": {
+      "pattern": "\\[(.+)\\s+لكل\\s+([\\p{Arabic}\\p{Latin}_][\\p{Arabic}\\p{Latin}\\p{Nd}_ـ]*)\\s+في\\s+(.+?)(\\s+إذا\\s+(.+))?\\]",
+      "example": "[ن * ٢ لكل ن في أرقام]",
+      "description": "قائمة استيعابية"
+    },
+    "enum_declaration": {
+      "pattern": "تعداد\\s+([\\p{Arabic}\\p{Latin}_][\\p{Arabic}\\p{Latin}\\p{Nd}_ـ]*)\\s*\\{",
+      "example": "تعداد لون { أحمر، أخضر، أزرق }",
+      "description": "تعريف تعداد"
+    },
+    "data_class_declaration": {
+      "pattern": "بيانات\\s+([\\p{Arabic}\\p{Latin}_][\\p{Arabic}\\p{Latin}\\p{Nd}_ـ]*)\\s*\\{",
+      "example": "بيانات منتج { اسم: نص، سعر: رقم }",
+      "description": "تعريف فئة بيانات"
+    },
+    "class_declaration": {
+      "pattern": "صنف\\s+([\\p{Arabic}\\p{Latin}_][\\p{Arabic}\\p{Latin}\\p{Nd}_ـ]*)(\\s*:\\s*([\\p{Arabic}\\p{Latin}_][\\p{Arabic}\\p{Latin}\\p{Nd}_ـ]*))?\\s*\\{",
+      "example": "صنف شخص { متغير الاسم؛ دالة تعريف() { } }",
+      "description": "تعريف صنف"
+    },
+    "try_catch": {
+      "pattern": "حاول\\s*\\{(.*)\\}\\s*امسك\\s*(?:\\(([^)]+)\\))?\\s*\\{(.*)\\}(\\s*أخيراً\\s*\\{(.*)\\})?",
+      "example": "حاول { } امسك (خطأ) { }",
+      "description": "معالجة الأخطاء"
+    },
+    "decorator": {
+      "pattern": "@([\\p{Arabic}\\p{Latin}_][\\p{Arabic}\\p{Latin}\\p{Nd}_ـ]*)",
+      "example": "@قياس_الوقت",
+      "description": "زخرفة"
+    },
+    "with_statement": {
+      "pattern": "مع\\s+(.+?)(\\s+كـ\\s+([\\p{Arabic}\\p{Latin}_][\\p{Arabic}\\p{Latin}\\p{Nd}_ـ]*))?\\s*\\{",
+      "example": "مع ملف كـ و { اطبع(و.اقرأ())؛ }",
+      "description": "مدير سياق"
+    }
+  },
+
+  "type_annotations": {
+    "simple_types": ["رقم", "عدد", "نص", "منطقي", "قائمة", "قاموس", "لا_شيء"],
+    "generic_syntax": {
+      "list": "[نوع]",
+      "dict": "{مفتاح: قيمة}",
+      "optional": "نوع؟",
+      "function": "(معاملات) -> نتيجة",
+      "union": "نوع أ | نوع ب"
+    },
+    "examples": [
+      "متغير العمر: رقم = ٢٥؛",
+      "دالة جمع(أ: رقم، ب: رقم) -> رقم { أرجع أ + ب؛ }",
+      "متجر أسماء: [نص] = [\"أحمد\"، \"محمد\"]؛"
+    ]
+  },
+
+  "builtin_functions": {
+    "io": {
+      "اطبع": {"params": ["قيمة"], "description": "طباعة قيمة"},
+      "ادخل": {"params": ["رسالة?"], "description": "قراءة إدخال"}
+    },
+    "conversion": {
+      "نص": {"params": ["قيمة"], "description": "تحويل إلى نص"},
+      "رقم": {"params": ["نص"], "description": "تحويل إلى رقم"},
+      "منطقي": {"params": ["قيمة"], "description": "تحويل إلى منطقي"}
+    },
+    "list_operations": {
+      "طول": {"params": ["قائمة"], "description": "طول القائمة"},
+      "مجموع": {"params": ["أرقام"], "description": "مجموع العناصر"},
+      "متوسط": {"params": ["أرقام"], "description": "المتوسط"},
+      "أدنى": {"params": ["أرقام"], "description": "أصغر قيمة"},
+      "أقصى": {"params": ["أرقام"], "description": "أكبر قيمة"},
+      "رتب": {"params": ["قائمة"], "description": "ترتيب القائمة"},
+      "اعكس": {"params": ["قائمة"], "description": "عكس القائمة"},
+      "فريد": {"params": ["قائمة"], "description": "إزالة المكررات"},
+      "أضف": {"params": ["قائمة", "عنصر"], "description": "إضافة عنصر"},
+      "أزل": {"params": ["قائمة", "فهرس"], "description": "إزالة عنصر"},
+      "ابحث": {"params": ["قائمة", "عنصر"], "description": "البحث عن عنصر"}
+    },
+    "string_operations": {
+      "كبير": {"params": ["نص"], "description": "تحويل لحروف كبيرة"},
+      "صغير": {"params": ["نص"], "description": "تحويل لحروف صغيرة"},
+      "اقتطع": {"params": ["نص", "بداية", "نهاية"], "description": "اقتطاع جزء"},
+      "انقسم": {"params": ["نص", "فاصل"], "description": "تقسيم النص"},
+      "اجمع": {"params": ["قائمة", "فاصل"], "description": "دمج النصوص"},
+      "استبدل": {"params": ["نص", "قديم", "جديد"], "description": "استبدال"},
+      "يبدأ_ب": {"params": ["نص", "بداية"], "description": "التحقق من البداية"},
+      "ينتهي_ب": {"params": ["نص", "نهاية"], "description": "التحقق من النهاية"}
+    },
+    "dict_operations": {
+      "مفاتيح": {"params": ["قاموس"], "description": "الحصول على المفاتيح"},
+      "قيم": {"params": ["قاموس"], "description": "الحصول على القيم"}
+    },
+    "utility": {
+      "نوع": {"params": ["قيمة"], "description": "نوع القيمة"},
+      "نطاق": {"params": ["بداية", "نهاية", "خطوة?"], "description": "إنشاء نطاق"}
+    }
+  },
+
+  "error_messages": {
+    "arabic": {
+      "undefined_variable": "المتغير '{name}' غير معرف",
+      "cannot_modify_const": "لا يمكن تعديل الثابت '{name}'",
+      "type_error": "خطأ في النوع: {expected} متوقع، وجد {found}",
+      "division_by_zero": "خطأ: القسمة على صفر",
+      "index_out_of_bounds": "الفهرس {index} خارج النطاق",
+      "function_not_found": "الدالة '{name}' غير موجودة",
+      "wrong_arguments": "عدد المعاملات غير صحيح",
+      "syntax_error": "خطأ نحوي في السطر {line}: {message}",
+      "unclosed_string": "نص غير مغلق في السطر {line}",
+      "unclosed_bracket": "قوس غير مغلق"
+    }
+  },
+
+  "code_style": {
+    "indentation": {
+      "style": "spaces",
+      "size": 4
+    },
+    "naming_conventions": {
+      "variables": "snake_case أو camelCase بالعربية",
+      "functions": "snake_case بالعربية",
+      "classes": "PascalCase بالعربية",
+      "constants": "UPPER_SNAKE_CASE"
+    },
+    "semicolons": "اختيارية (؛ أو ;)",
+    "max_line_length": 100
+  }
+}

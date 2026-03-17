@@ -1,0 +1,12 @@
+{
+  "name": "almarjaa-runner",
+  "version": "1.0.0",
+  "description": "Al-Marjaa Language Code Execution Service",
+  "type": "module",
+  "scripts": {
+    "dev": "bun --hot run index.ts"
+  },
+  "dependencies": {
+    "z-ai-web-dev-sdk": "^0.0.17"
+  }
+}
