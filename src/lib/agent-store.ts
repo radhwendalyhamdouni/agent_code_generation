@@ -43,7 +43,7 @@ export interface CodeBlock {
 export interface Task {
   id: string;
   content: string;
-  status: 'pending' | 'in_progress' | 'completed' | 'failed';
+  status: 'pending' | 'in_progress' | 'completed' | 'failed' | 'paused';
   priority: 'high' | 'medium' | 'low';
   progress: number;
   details?: string;
@@ -104,6 +104,19 @@ export interface GitHubConfig {
 type TaskCallback = (task: Task) => void;
 type FileCallback = (file: ProjectFile) => void;
 type MessageCallback = (message: Message) => void;
+
+// AI Provider Types
+export interface AIProvider {
+  id: string;
+  name: string;
+  apiKey: string;
+  baseUrl?: string;
+  model: string;
+  free: boolean;
+  dailyLimit?: number;
+  usedToday?: number;
+  priority: number;
+}
 
 export interface AgentState {
   // Theme
@@ -190,6 +203,20 @@ export interface AgentState {
   // Current execution
   currentTaskId: string | null;
   setCurrentTaskId: (id: string | null) => void;
+
+  // AI Providers
+  aiProviders: AIProvider[];
+  currentProvider: string;
+  setAIProviders: (providers: AIProvider[]) => void;
+  setCurrentProvider: (id: string) => void;
+  addAIProvider: (provider: Omit<AIProvider, 'id'>) => void;
+  removeAIProvider: (id: string) => void;
+  updateAIProvider: (id: string, updates: Partial<AIProvider>) => void;
+  getNextAvailableProvider: () => AIProvider | null;
+
+  // File operations
+  deleteFile: (path: string) => void;
+  renameFile: (oldPath: string, newName: string) => void;
 }
 
 // Helper function to generate unique IDs
@@ -331,9 +358,33 @@ export const useAgentStore = create<AgentState>()(
       toggleFolder: (path) => set((state) => ({
         files: toggleFolderInTree(state.files, path),
       })),
-      addFile: (file) => set((state) => ({
-        files: [...state.files, file]
+      addFile: (file) => set((state) => {
+        // منع تكرار الملفات - التحقق من وجود الملف مسبقاً
+        const existingIndex = state.files.findIndex(f => f.path === file.path);
+        if (existingIndex >= 0) {
+          // تحديث الملف الموجود بدلاً من إضافة نسخة جديدة
+          const updatedFiles = [...state.files];
+          updatedFiles[existingIndex] = file;
+          return { files: updatedFiles };
+        }
+        return { files: [...state.files, file] };
+      }),
+      deleteFile: (path) => set((state) => ({
+        files: state.files.filter(f => f.path !== path),
       })),
+      renameFile: (oldPath, newName) => set((state) => {
+        const newFileName = newName.includes('.') ? newName : newName + '.mrj';
+        const newPath = oldPath.includes('/') 
+          ? oldPath.substring(0, oldPath.lastIndexOf('/') + 1) + newFileName
+          : newFileName;
+        return {
+          files: state.files.map(f => 
+            f.path === oldPath 
+              ? { ...f, name: newFileName, path: newPath }
+              : f
+          ),
+        };
+      }),
 
       // Terminal
       terminalLines: [],
@@ -447,6 +498,73 @@ export const useAgentStore = create<AgentState>()(
       // Current execution
       currentTaskId: null,
       setCurrentTaskId: (id) => set({ currentTaskId: id }),
+
+      // AI Providers - مزودو AI المجانيون
+      aiProviders: [
+        {
+          id: 'gemini',
+          name: 'Google Gemini',
+          apiKey: '',
+          baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+          model: 'gemini-pro',
+          free: true,
+          dailyLimit: 1500,
+          usedToday: 0,
+          priority: 1,
+        },
+        {
+          id: 'groq',
+          name: 'Groq',
+          apiKey: '',
+          baseUrl: 'https://api.groq.com/openai/v1',
+          model: 'llama3-8b-8192',
+          free: true,
+          dailyLimit: 14400,
+          usedToday: 0,
+          priority: 2,
+        },
+        {
+          id: 'together',
+          name: 'Together AI',
+          apiKey: '',
+          baseUrl: 'https://api.together.xyz/v1',
+          model: 'mistralai/Mixtral-8x7B-Instruct-v0.1',
+          free: true,
+          dailyLimit: 1000,
+          usedToday: 0,
+          priority: 3,
+        },
+        {
+          id: 'cohere',
+          name: 'Cohere',
+          apiKey: '',
+          baseUrl: 'https://api.cohere.ai/v1',
+          model: 'command',
+          free: true,
+          dailyLimit: 1000,
+          usedToday: 0,
+          priority: 4,
+        },
+      ],
+      currentProvider: 'gemini',
+      setAIProviders: (providers) => set({ aiProviders: providers }),
+      setCurrentProvider: (id) => set({ currentProvider: id }),
+      addAIProvider: (provider) => set((state) => ({
+        aiProviders: [...state.aiProviders, { ...provider, id: generateId() }],
+      })),
+      removeAIProvider: (id) => set((state) => ({
+        aiProviders: state.aiProviders.filter(p => p.id !== id),
+      })),
+      updateAIProvider: (id, updates) => set((state) => ({
+        aiProviders: state.aiProviders.map(p => p.id === id ? { ...p, ...updates } : p),
+      })),
+      getNextAvailableProvider: () => {
+        const state = get();
+        const sorted = [...state.aiProviders]
+          .filter(p => p.apiKey && p.free && (p.dailyLimit === undefined || (p.usedToday || 0) < p.dailyLimit))
+          .sort((a, b) => a.priority - b.priority);
+        return sorted[0] || null;
+      },
     }),
     {
       name: 'agent-storage',
@@ -458,6 +576,8 @@ export const useAgentStore = create<AgentState>()(
         github: state.github,
         sidebarOpen: state.sidebarOpen,
         todoPanelOpen: state.todoPanelOpen,
+        aiProviders: state.aiProviders,
+        currentProvider: state.currentProvider,
       }),
     }
   )

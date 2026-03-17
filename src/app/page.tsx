@@ -6,7 +6,7 @@
  * يستخدم Zustand لإدارة الحالة المركزية
  */
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -32,11 +32,16 @@ import {
   ListTodo,
   ChevronDown,
   Eye,
+  Pause,
+  Play,
+  X,
+  RotateCcw,
 } from 'lucide-react';
 import { ChatArea } from '@/components/agent/chat-area';
 import { TodoPanel } from '@/components/agent/todo-panel';
 import { TerminalPanel } from '@/components/agent/terminal-panel';
 import { FloatingWindowsContainer, MinimizedWindowsBar } from '@/components/agent/floating-window';
+import { SettingsPanel } from '@/components/agent/settings-panel';
 import { useAgentStore } from '@/lib/agent-store';
 
 export default function AgentInterface() {
@@ -284,33 +289,7 @@ export default function AgentInterface() {
                         </div>
                       ) : (
                         tasks.map(task => (
-                          <div
-                            key={task.id}
-                            className={cn(
-                              "p-2 rounded-lg border text-xs transition-all",
-                              task.status === 'completed' && "bg-green-500/10 border-green-500/30",
-                              task.status === 'in_progress' && "bg-yellow-500/10 border-yellow-500/30",
-                              task.status === 'failed' && "bg-red-500/10 border-red-500/30",
-                              task.status === 'pending' && "bg-muted/30 border-border"
-                            )}
-                          >
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="font-medium truncate">{task.content.substring(0, 30)}...</span>
-                              <Badge variant="outline" className="text-[10px]">{task.progress}%</Badge>
-                            </div>
-                            {/* Progress bar */}
-                            <div className="h-1 bg-muted rounded-full overflow-hidden">
-                              <div 
-                                className={cn(
-                                  "h-full transition-all duration-300",
-                                  task.status === 'completed' && "bg-green-500",
-                                  task.status === 'in_progress' && "bg-yellow-500",
-                                  task.status === 'failed' && "bg-red-500"
-                                )}
-                                style={{ width: `${task.progress}%` }}
-                              />
-                            </div>
-                          </div>
+                          <TaskItem key={task.id} task={task} />
                         ))
                       )}
                     </div>
@@ -404,15 +383,23 @@ export default function AgentInterface() {
                   </ScrollArea>
 
                   {/* Settings */}
-                  <div className="border-t border-border p-2 shrink-0">
+                  <div className="border-t border-border p-2 shrink-0 space-y-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full justify-start gap-2"
+                      onClick={() => openFloatingWindow('settings', 'الإعدادات')}
+                    >
+                      <Settings className="h-4 w-4" />
+                      إعدادات AI
+                    </Button>
                     <Button
                       variant="outline"
                       size="sm"
                       className="w-full justify-start gap-2"
                       onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
                     >
-                      <Settings className="h-4 w-4" />
-                      {theme === 'dark' ? 'الوضع الفاتح' : 'الوضع الداكن'}
+                      {theme === 'dark' ? '☀️ الوضع الفاتح' : '🌙 الوضع الداكن'}
                     </Button>
                   </div>
                 </div>
@@ -459,6 +446,113 @@ export default function AgentInterface() {
       
       {/* Minimized Windows Bar */}
       <MinimizedWindowsBar />
+    </div>
+  );
+}
+
+// Task Item Component with controls
+function TaskItem({ task }: { task: { id: string; content: string; status: string; progress: number } }) {
+  const { updateTask, deleteTask } = useAgentStore();
+  const [showControls, setShowControls] = useState(false);
+
+  const statusConfig = {
+    completed: { bg: 'bg-green-500/10', border: 'border-green-500/30', bar: 'bg-green-500' },
+    in_progress: { bg: 'bg-yellow-500/10', border: 'border-yellow-500/30', bar: 'bg-yellow-500' },
+    failed: { bg: 'bg-red-500/10', border: 'border-red-500/30', bar: 'bg-red-500' },
+    pending: { bg: 'bg-muted/30', border: 'border-border', bar: 'bg-muted-foreground' },
+    paused: { bg: 'bg-blue-500/10', border: 'border-blue-500/30', bar: 'bg-blue-500' },
+  };
+
+  const config = statusConfig[task.status as keyof typeof statusConfig] || statusConfig.pending;
+
+  return (
+    <div
+      className={cn(
+        "p-2 rounded-lg border text-xs transition-all relative",
+        config.bg,
+        config.border
+      )}
+      onMouseEnter={() => setShowControls(true)}
+      onMouseLeave={() => setShowControls(false)}
+    >
+      <div className="flex items-center justify-between mb-1">
+        <span className="font-medium truncate flex-1">{task.content.substring(0, 30)}...</span>
+        <div className="flex items-center gap-1">
+          <Badge variant="outline" className="text-[10px]">{task.progress}%</Badge>
+        </div>
+      </div>
+      
+      {/* Progress bar */}
+      <div className="h-1 bg-muted rounded-full overflow-hidden">
+        <div 
+          className={cn("h-full transition-all duration-300", config.bar)}
+          style={{ width: `${task.progress}%` }}
+        />
+      </div>
+
+      {/* Task Controls */}
+      {showControls && task.status !== 'completed' && (
+        <div className="absolute left-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 bg-background/95 rounded p-0.5 border border-border">
+          {task.status === 'in_progress' && (
+            <>
+              <button
+                className="p-1 hover:bg-yellow-500/20 rounded text-yellow-400"
+                onClick={() => updateTask(task.id, { status: 'paused' as any })}
+                title="إيقاف مؤقت"
+              >
+                <Pause className="h-3 w-3" />
+              </button>
+              <button
+                className="p-1 hover:bg-red-500/20 rounded text-red-400"
+                onClick={() => {
+                  updateTask(task.id, { status: 'failed' as any, progress: 0 });
+                }}
+                title="إلغاء"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </>
+          )}
+          {task.status === 'paused' && (
+            <>
+              <button
+                className="p-1 hover:bg-green-500/20 rounded text-green-400"
+                onClick={() => updateTask(task.id, { status: 'in_progress' as any })}
+                title="مواصلة"
+              >
+                <Play className="h-3 w-3" />
+              </button>
+              <button
+                className="p-1 hover:bg-red-500/20 rounded text-red-400"
+                onClick={() => {
+                  updateTask(task.id, { status: 'failed' as any });
+                }}
+                title="إلغاء"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </>
+          )}
+          {task.status === 'failed' && (
+            <button
+              className="p-1 hover:bg-blue-500/20 rounded text-blue-400"
+              onClick={() => updateTask(task.id, { status: 'pending' as any, progress: 0 })}
+              title="إعادة"
+            >
+              <RotateCcw className="h-3 w-3" />
+            </button>
+          )}
+          {task.status === 'pending' && (
+            <button
+              className="p-1 hover:bg-red-500/20 rounded text-red-400"
+              onClick={() => deleteTask(task.id)}
+              title="حذف"
+            >
+              <Trash2 className="h-3 w-3" />
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

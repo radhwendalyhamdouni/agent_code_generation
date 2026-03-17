@@ -21,6 +21,7 @@ import { TerminalPanel } from './terminal-panel';
 import { FileManager } from './file-manager';
 import { GitHubPanel } from './github-panel';
 import { FileViewer } from './file-viewer';
+import { SettingsPanel } from './settings-panel';
 
 interface FloatingWindowProps {
   window: FloatingWindowType;
@@ -108,6 +109,8 @@ export function FloatingWindow({ window: win }: FloatingWindowProps) {
         return <GitHubPanel />;
       case 'preview':
         return <FileViewer />;
+      case 'settings':
+        return <SettingsPanel />;
       default:
         return (
           <div className="flex items-center justify-center h-full text-muted-foreground">
