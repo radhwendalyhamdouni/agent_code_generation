@@ -1,16 +1,15 @@
 'use client';
 
 /**
- * مدير الملفات
- * File manager with tree view and code editor
+ * مدير الملفات - يحفظ الملفات فعلياً على الخادم
+ * File manager with real file system operations
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
 import {
   Dialog,
   DialogContent,
@@ -42,6 +41,7 @@ import {
   Download,
   Save,
   X,
+  Loader2,
 } from 'lucide-react';
 import { useAgentStore, ProjectFile } from '@/lib/agent-store';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -59,40 +59,10 @@ const getLanguageFromPath = (path: string): string => {
     rs: 'rust',
     go: 'go',
     java: 'java',
-    cpp: 'cpp',
-    c: 'c',
-    h: 'c',
-    hpp: 'cpp',
-    cs: 'csharp',
-    rb: 'ruby',
-    php: 'php',
-    swift: 'swift',
-    kt: 'kotlin',
-    scala: 'scala',
-    r: 'r',
-    sql: 'sql',
-    sh: 'bash',
-    bash: 'bash',
+    mrj: 'almarjaa',
     json: 'json',
-    yaml: 'yaml',
-    yml: 'yaml',
-    xml: 'xml',
-    html: 'html',
-    htm: 'html',
-    css: 'css',
-    scss: 'scss',
-    sass: 'sass',
-    less: 'less',
     md: 'markdown',
-    mdx: 'mdx',
-    graphql: 'graphql',
-    gql: 'graphql',
-    dockerfile: 'dockerfile',
-    makefile: 'makefile',
-    toml: 'toml',
-    ini: 'ini',
-    env: 'bash',
-    mrj: 'almarjaa', // Custom language
+    txt: 'text',
   };
   return langMap[ext] || ext;
 };
@@ -101,7 +71,7 @@ const getLanguageFromPath = (path: string): string => {
 function FileIcon({ name, className }: { name: string; className?: string }) {
   const ext = name.split('.').pop()?.toLowerCase();
   
-  if (['ts', 'tsx', 'js', 'jsx', 'py', 'rs', 'go', 'java'].includes(ext || '')) {
+  if (['ts', 'tsx', 'js', 'jsx', 'py', 'rs', 'go', 'java', 'mrj'].includes(ext || '')) {
     return <FileCode className={cn("text-primary", className)} />;
   }
   if (['md', 'txt', 'log'].includes(ext || '')) {
@@ -113,9 +83,10 @@ function FileIcon({ name, className }: { name: string; className?: string }) {
 export function FileManager() {
   const [isNewFileDialogOpen, setIsNewFileDialogOpen] = useState(false);
   const [newFileName, setNewFileName] = useState('');
-  const [editingPath, setEditingPath] = useState<string | null>(null);
   const [copiedPath, setCopiedPath] = useState<string | null>(null);
   const [editorContent, setEditorContent] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const {
     files,
@@ -126,48 +97,153 @@ export function FileManager() {
     toggleFolder,
   } = useAgentStore();
 
+  // Load files from server on mount
+  useEffect(() => {
+    loadFiles();
+  }, []);
+
   // Get selected file data
   const selectedFileData = findFile(files, selectedFile);
+
+  // Load files from API
+  const loadFiles = useCallback(async () => {
+    setLoading(true);
+    try {
+      const response = await fetch('/api/files');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.files && data.files.length > 0) {
+          setFiles(data.files.map((f: any) => ({
+            name: f.name || f.path.split('/').pop(),
+            path: f.path,
+            type: 'file' as const,
+            content: f.content,
+            language: f.language || 'text',
+          })));
+        }
+      }
+    } catch (error) {
+      console.error('Error loading files:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [setFiles]);
 
   // Handle file selection
   const handleSelectFile = useCallback((path: string, content?: string) => {
     setSelectedFile(path);
-    if (content) {
+    if (content !== undefined) {
       setEditorContent(content);
     }
-    setEditingPath(path);
   }, [setSelectedFile]);
 
-  // Create new file
-  const handleCreateFile = useCallback(() => {
+  // Create new file on server
+  const handleCreateFile = useCallback(async () => {
     if (!newFileName.trim()) return;
 
-    // منع تكرار الملفات
-    if (files.some(f => f.path === newFileName)) {
+    const fileName = newFileName.includes('.') ? newFileName : `${newFileName}.mrj`;
+    
+    // Check for duplicates locally
+    if (files.some(f => f.path === fileName)) {
+      alert('الملف موجود مسبقاً');
       return;
     }
 
-    const newFile: ProjectFile = {
-      name: newFileName,
-      path: newFileName,
-      type: 'file',
-      content: '',
-      language: getLanguageFromPath(newFileName),
-    };
+    setSaving(true);
+    try {
+      const response = await fetch('/api/files', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'create',
+          path: fileName,
+          name: fileName,
+          content: '// ملف جديد\nاطبع("مرحباً!")؛\n',
+        }),
+      });
 
-    setFiles([...files, newFile]);
-    handleSelectFile(newFileName, '');
-    setNewFileName('');
-    setIsNewFileDialogOpen(false);
+      const result = await response.json();
+      
+      if (result.success) {
+        // Add to local state
+        const newFile: ProjectFile = {
+          name: fileName,
+          path: fileName,
+          type: 'file',
+          content: '// ملف جديد\nاطبع("مرحباً!")؛\n',
+          language: getLanguageFromPath(fileName),
+        };
+        
+        setFiles([...files, newFile]);
+        handleSelectFile(fileName, newFile.content);
+        setNewFileName('');
+        setIsNewFileDialogOpen(false);
+      } else {
+        alert(result.error || 'فشل إنشاء الملف');
+      }
+    } catch (error: any) {
+      console.error('Create file error:', error);
+      alert('حدث خطأ أثناء إنشاء الملف');
+    } finally {
+      setSaving(false);
+    }
   }, [newFileName, files, setFiles, handleSelectFile]);
 
-  // Delete file
-  const handleDeleteFile = useCallback((path: string) => {
-    setFiles(files.filter((f) => f.path !== path));
-    if (selectedFile === path) {
-      setSelectedFile(null);
+  // Delete file from server
+  const handleDeleteFile = useCallback(async (filePath: string) => {
+    if (!confirm(`هل أنت متأكد من حذف "${filePath}"؟`)) return;
+
+    try {
+      const response = await fetch(`/api/files?path=${encodeURIComponent(filePath)}`, {
+        method: 'DELETE',
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        setFiles(files.filter(f => f.path !== filePath));
+        if (selectedFile === filePath) {
+          setSelectedFile(null);
+        }
+      } else {
+        alert(result.error || 'فشل حذف الملف');
+      }
+    } catch (error) {
+      console.error('Delete file error:', error);
+      alert('حدث خطأ أثناء حذف الملف');
     }
   }, [files, setFiles, selectedFile, setSelectedFile]);
+
+  // Save file content to server
+  const handleSaveContent = useCallback(async () => {
+    if (!selectedFile) return;
+
+    setSaving(true);
+    try {
+      const response = await fetch('/api/files', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'update',
+          path: selectedFile,
+          content: editorContent,
+        }),
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        updateFileContent(selectedFile, editorContent);
+      } else {
+        alert(result.error || 'فشل حفظ الملف');
+      }
+    } catch (error) {
+      console.error('Save file error:', error);
+      alert('حدث خطأ أثناء حفظ الملف');
+    } finally {
+      setSaving(false);
+    }
+  }, [selectedFile, editorContent, updateFileContent]);
 
   // Copy file path
   const handleCopyPath = useCallback((path: string) => {
@@ -176,27 +252,18 @@ export function FileManager() {
     setTimeout(() => setCopiedPath(null), 2000);
   }, []);
 
-  // Save file content
-  const handleSaveContent = useCallback(() => {
-    if (selectedFile) {
-      updateFileContent(selectedFile, editorContent);
-    }
-  }, [selectedFile, editorContent, updateFileContent]);
-
-  // Load files from API
-  const loadFiles = useCallback(async () => {
-    try {
-      const response = await fetch('/api/files');
-      if (response.ok) {
-        const data = await response.json();
-        if (data.files) {
-          setFiles(data.files);
-        }
-      }
-    } catch (error) {
-      console.error('Error loading files:', error);
-    }
-  }, [setFiles]);
+  // Download file
+  const handleDownload = useCallback(() => {
+    if (!selectedFileData) return;
+    
+    const blob = new Blob([editorContent || selectedFileData.content || ''], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = selectedFileData.name;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [selectedFileData, editorContent]);
 
   return (
     <div className="h-full flex flex-col bg-background" dir="rtl">
@@ -215,8 +282,9 @@ export function FileManager() {
             size="icon"
             className="h-7 w-7"
             onClick={loadFiles}
+            disabled={loading}
           >
-            <RefreshCw className="h-3.5 w-3.5" />
+            <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
           </Button>
           <Button
             variant="ghost"
@@ -235,7 +303,11 @@ export function FileManager() {
         <div className="w-56 border-l border-border flex flex-col shrink-0">
           <ScrollArea className="flex-1">
             <div className="p-2">
-              {files.length === 0 ? (
+              {loading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : files.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <Folder className="h-8 w-8 mx-auto mb-2 opacity-30" />
                   <p className="text-xs">لا توجد ملفات</p>
@@ -249,7 +321,7 @@ export function FileManager() {
                   </Button>
                 </div>
               ) : (
-                // إزالة الملفات المكررة قبل العرض
+                // Remove duplicates before rendering
                 [...files]
                   .filter((file, index, self) => 
                     self.findIndex(f => f.path === file.path) === index
@@ -291,9 +363,22 @@ export function FileManager() {
                     size="sm"
                     className="h-7 gap-1"
                     onClick={handleSaveContent}
+                    disabled={saving}
                   >
-                    <Save className="h-3.5 w-3.5" />
+                    {saving ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Save className="h-3.5 w-3.5" />
+                    )}
                     حفظ
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 gap-1"
+                    onClick={handleDownload}
+                  >
+                    <Download className="h-3.5 w-3.5" />
                   </Button>
                   <Button
                     variant="ghost"
@@ -364,17 +449,28 @@ export function FileManager() {
             <Input
               value={newFileName}
               onChange={(e) => setNewFileName(e.target.value)}
-              placeholder="اسم الملف (مثال: main.ts)"
+              placeholder="اسم الملف (مثال: main.mrj)"
               className="bg-muted/50"
               onKeyDown={(e) => e.key === 'Enter' && handleCreateFile()}
+              disabled={saving}
             />
+            <p className="text-xs text-muted-foreground mt-2">
+              سيتم إنشاء الملف في مجلد sandbox
+            </p>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsNewFileDialogOpen(false)}>
+            <Button variant="outline" onClick={() => setIsNewFileDialogOpen(false)} disabled={saving}>
               إلغاء
             </Button>
-            <Button onClick={handleCreateFile} disabled={!newFileName.trim()}>
-              إنشاء
+            <Button onClick={handleCreateFile} disabled={!newFileName.trim() || saving}>
+              {saving ? (
+                <>
+                  <Loader2 className="h-4 w-4 ml-1 animate-spin" />
+                  جاري الإنشاء...
+                </>
+              ) : (
+                'إنشاء'
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
