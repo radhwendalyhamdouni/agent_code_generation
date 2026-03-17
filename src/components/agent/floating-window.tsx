@@ -20,6 +20,7 @@ import { useAgentStore, FloatingWindow as FloatingWindowType } from '@/lib/agent
 import { TerminalPanel } from './terminal-panel';
 import { FileManager } from './file-manager';
 import { GitHubPanel } from './github-panel';
+import { FileViewer } from './file-viewer';
 
 interface FloatingWindowProps {
   window: FloatingWindowType;
@@ -105,6 +106,8 @@ export function FloatingWindow({ window: win }: FloatingWindowProps) {
         return <FileManager />;
       case 'github':
         return <GitHubPanel />;
+      case 'preview':
+        return <FileViewer />;
       default:
         return (
           <div className="flex items-center justify-center h-full text-muted-foreground">

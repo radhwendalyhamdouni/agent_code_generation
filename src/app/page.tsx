@@ -31,6 +31,7 @@ import {
   Settings,
   ListTodo,
   ChevronDown,
+  Eye,
 } from 'lucide-react';
 import { ChatArea } from '@/components/agent/chat-area';
 import { TodoPanel } from '@/components/agent/todo-panel';
@@ -168,6 +169,17 @@ export default function AgentInterface() {
           >
             <FolderOpen className="h-4 w-4" />
             الملفات
+          </Button>
+
+          {/* Open Preview */}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="gap-2 hover:bg-primary/10 hover:text-primary"
+            onClick={() => openFloatingWindow('preview', 'معاينة المشروع')}
+          >
+            <Eye className="h-4 w-4" />
+            معاينة
           </Button>
 
           {/* Open GitHub */}
