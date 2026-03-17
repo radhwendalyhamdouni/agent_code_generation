@@ -1,23 +1,20 @@
 'use client';
 
 /**
- * وكيل المرجع الذكي - واجهة احترافية متقدمة
- * Professional Advanced UI for Al-Marjaa AI Agent
+ * وكيل المرجع الذكي - نظام Agentic متكامل
+ * Professional Agentic AI System for Al-Marjaa Language
  * 
  * © 2026 رضوان دالي حمدوني - All Rights Reserved
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
-import { Slider } from '@/components/ui/slider';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Progress } from '@/components/ui/progress';
 import {
   ResizableHandle,
   ResizablePanel,
@@ -36,19 +33,30 @@ import {
   FileCode, Plus, RefreshCw, Download, Upload,
   ChevronDown, Folder, Settings as SettingsIcon,
   MessageSquare, Sparkles, PanelLeftClose, PanelLeft,
-  X, Save, Moon, Sun, Volume2, VolumeX,
-  GitBranch, Trash2, FileArchive, FolderPlus,
-  Globe, Type, AlignRight, AlignLeft,
-  Zap, Cpu, Database, Shield, Info
+  X, Save, Trash2, FolderPlus,
+  Zap, Cpu, CheckCircle, XCircle, AlertCircle,
+  Wrench, FileText, Clock, Rocket, Loader
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 // Types
-interface Message {
+interface ExecutionStep {
   id: string;
-  role: 'user' | 'assistant';
+  type: 'think' | 'create' | 'execute' | 'fix' | 'success' | 'error' | 'info';
+  title: string;
   content: string;
+  code?: string;
+  filePath?: string;
+  output?: string;
+  error?: string;
   timestamp: Date;
+  duration?: number;
+}
+
+interface ProjectFile {
+  path: string;
+  content: string;
+  language: string;
 }
 
 interface FileItem {
@@ -58,313 +66,282 @@ interface FileItem {
   size?: number;
 }
 
-interface AppSettings {
-  theme: string;
-  language: string;
-  fontSize: number;
-  autoSave: boolean;
-  autoSaveDelay: number;
-  showLineNumbers: boolean;
-  wordWrap: boolean;
-  tabSize: number;
-  aiProvider: string;
-  aiModel: string;
-  terminalFontSize: number;
-  editorFont: string;
-  rtl: boolean;
-  notifications: boolean;
-  soundEffects: boolean;
+// Step Icon Component
+function StepIcon({ type }: { type: ExecutionStep['type'] }) {
+  const iconClass = "h-5 w-5";
+  switch (type) {
+    case 'think':
+      return <Cpu className={cn(iconClass, "text-purple-400")} />;
+    case 'create':
+      return <FileCode className={cn(iconClass, "text-blue-400")} />;
+    case 'execute':
+      return <Play className={cn(iconClass, "text-yellow-400")} />;
+    case 'fix':
+      return <Wrench className={cn(iconClass, "text-orange-400")} />;
+    case 'success':
+      return <CheckCircle className={cn(iconClass, "text-green-400")} />;
+    case 'error':
+      return <XCircle className={cn(iconClass, "text-red-400")} />;
+    case 'info':
+    default:
+      return <AlertCircle className={cn(iconClass, "text-cyan-400")} />;
+  }
 }
 
-// Default settings
-const DEFAULT_SETTINGS: AppSettings = {
-  theme: 'dark',
-  language: 'ar',
-  fontSize: 14,
-  autoSave: true,
-  autoSaveDelay: 1000,
-  showLineNumbers: true,
-  wordWrap: true,
-  tabSize: 4,
-  aiProvider: 'zai',
-  aiModel: 'default',
-  terminalFontSize: 13,
-  editorFont: 'monospace',
-  rtl: true,
-  notifications: true,
-  soundEffects: false,
-};
+// Step Card Component
+function StepCard({ step }: { step: ExecutionStep }) {
+  const [expanded, setExpanded] = useState(false);
+  const hasDetails = step.code || step.output || step.error;
+
+  return (
+    <div className={cn(
+      "rounded-lg border transition-all duration-300",
+      step.type === 'success' && "border-green-500/30 bg-green-500/5",
+      step.type === 'error' && "border-red-500/30 bg-red-500/5",
+      step.type === 'think' && "border-purple-500/30 bg-purple-500/5",
+      step.type === 'create' && "border-blue-500/30 bg-blue-500/5",
+      step.type === 'execute' && "border-yellow-500/30 bg-yellow-500/5",
+      step.type === 'fix' && "border-orange-500/30 bg-orange-500/5",
+      !['success', 'error', 'think', 'create', 'execute', 'fix'].includes(step.type) && "border-slate-500/30 bg-slate-500/5"
+    )}>
+      <div 
+        className={cn("flex items-start gap-3 p-3", hasDetails && "cursor-pointer")}
+        onClick={() => hasDetails && setExpanded(!expanded)}
+      >
+        <div className="mt-0.5 shrink-0">
+          <StepIcon type={step.type} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="font-medium text-sm text-slate-100">{step.title}</span>
+            {step.filePath && (
+              <Badge variant="outline" className="text-xs bg-slate-800 border-slate-600">
+                {step.filePath}
+              </Badge>
+            )}
+          </div>
+          <p className="text-xs text-slate-400 whitespace-pre-wrap">{step.content}</p>
+          <div className="flex items-center gap-2 mt-1">
+            <span className="text-[10px] text-slate-500">
+              {step.timestamp.toLocaleTimeString('ar-SA')}
+            </span>
+            {step.duration && (
+              <span className="text-[10px] text-slate-500">
+                ({step.duration}ms)
+              </span>
+            )}
+          </div>
+        </div>
+        {hasDetails && (
+          <ChevronDown className={cn(
+            "h-4 w-4 text-slate-500 transition-transform",
+            expanded && "rotate-180"
+          )} />
+        )}
+      </div>
+      
+      {expanded && hasDetails && (
+        <div className="px-3 pb-3 pt-0 space-y-2">
+          {step.code && (
+            <div className="rounded-md bg-slate-900/80 border border-slate-700/50 overflow-hidden">
+              <div className="px-2 py-1 text-xs text-slate-400 bg-slate-800/50 border-b border-slate-700/50">
+                الكود
+              </div>
+              <pre className="p-2 text-xs font-mono text-emerald-300 overflow-x-auto" dir="ltr">
+                {step.code}
+              </pre>
+            </div>
+          )}
+          {step.output && (
+            <div className="rounded-md bg-slate-900/80 border border-slate-700/50 overflow-hidden">
+              <div className="px-2 py-1 text-xs text-slate-400 bg-slate-800/50 border-b border-slate-700/50">
+                المخرجات
+              </div>
+              <pre className="p-2 text-xs font-mono text-cyan-300 whitespace-pre-wrap" dir="ltr">
+                {step.output}
+              </pre>
+            </div>
+          )}
+          {step.error && (
+            <div className="rounded-md bg-red-950/30 border border-red-500/30 overflow-hidden">
+              <div className="px-2 py-1 text-xs text-red-400 bg-red-900/20 border-b border-red-500/30">
+                الخطأ
+              </div>
+              <pre className="p-2 text-xs font-mono text-red-300 whitespace-pre-wrap" dir="ltr">
+                {step.error}
+              </pre>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // Main Component
 export default function AlMarjaaAgentPage() {
   // State
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [activeTab, setActiveTab] = useState('chat');
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [inputMessage, setInputMessage] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [code, setCode] = useState('// اكتب كود لغة المرجع هنا\nاطبع("مرحباً بالعالم!")؛');
-  const [output, setOutput] = useState('');
-  const [terminalHistory, setTerminalHistory] = useState<string[]>([
-    '╔══════════════════════════════════════════════════╗',
-    '║     متحكم الطرفية - لغة المرجع                  ║',
-    '║     البيئة: sandbox                             ║',
-    '╚══════════════════════════════════════════════════╝',
-    ''
-  ]);
-  const [terminalInput, setTerminalInput] = useState('');
-  const [files, setFiles] = useState<FileItem[]>([]);
+  const [activeTab, setActiveTab] = useState('agent');
+  const [taskDescription, setTaskDescription] = useState('');
+  const [isExecuting, setIsExecuting] = useState(false);
+  const [steps, setSteps] = useState<ExecutionStep[]>([]);
+  const [files, setFiles] = useState<ProjectFile[]>([]);
+  const [iterations, setIterations] = useState(0);
+  const [maxIterations] = useState(10);
+  const [success, setSuccess] = useState<boolean | null>(null);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [newProjectOpen, setNewProjectOpen] = useState(false);
-  const [newProjectName, setNewProjectName] = useState('');
-  const [newProjectType, setNewProjectType] = useState('console');
   
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const stepsEndRef = useRef<HTMLDivElement>(null);
 
-  // Scroll to bottom on new message
+  // Scroll to bottom on new step
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    stepsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [steps]);
 
-  // Load files and settings on mount
+  // Load files on mount
   useEffect(() => {
     loadFiles();
-    loadSettings();
   }, []);
 
-  // Load settings
-  const loadSettings = async () => {
-    try {
-      const response = await fetch('/api/settings');
-      if (!response.ok) {
-        console.warn('Settings API returned:', response.status);
-        return;
-      }
-      const text = await response.text();
-      if (!text) return;
-      try {
-        const data = JSON.parse(text);
-        if (data.success) {
-          setSettings({ ...DEFAULT_SETTINGS, ...data.settings });
-        }
-      } catch (parseError) {
-        console.warn('Settings parse error');
-      }
-    } catch (error) {
-      console.error('Error loading settings:', error);
-    }
-  };
-
-  // Save settings
-  const saveSettings = async (newSettings: Partial<AppSettings>) => {
-    try {
-      const response = await fetch('/api/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newSettings)
-      });
-      const data = await response.json();
-      if (data.success) {
-        setSettings(data.settings);
-      }
-    } catch (error) {
-      console.error('Error saving settings:', error);
-    }
-  };
-
-  // Load files from API
+  // Load files from sandbox
   const loadFiles = async () => {
     try {
-      const response = await fetch('/api/files');
-      if (!response.ok) {
-        console.warn('Files API returned:', response.status);
-        setFiles([
-          { name: 'main.mrj', path: 'main.mrj', type: 'file' },
-          { name: 'config.mrj', path: 'config.mrj', type: 'file' },
-        ]);
-        return;
-      }
-      const text = await response.text();
-      if (!text) {
-        setFiles([
-          { name: 'main.mrj', path: 'main.mrj', type: 'file' },
-          { name: 'config.mrj', path: 'config.mrj', type: 'file' },
-        ]);
-        return;
-      }
-      try {
-        const data = JSON.parse(text);
-        if (data.success) {
-          setFiles(data.files || []);
-        } else {
-          setFiles([
-            { name: 'main.mrj', path: 'main.mrj', type: 'file' },
-            { name: 'config.mrj', path: 'config.mrj', type: 'file' },
-            { name: 'utils.mrj', path: 'utils.mrj', type: 'file' },
-          ]);
+      const response = await fetch('/api/agent/task?action=list');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.files) {
+          setFiles(data.files);
         }
-      } catch (parseError) {
-        console.warn('Files parse error');
-        setFiles([
-          { name: 'main.mrj', path: 'main.mrj', type: 'file' },
-          { name: 'config.mrj', path: 'config.mrj', type: 'file' },
-        ]);
       }
     } catch (error) {
       console.error('Error loading files:', error);
-      setFiles([
-        { name: 'main.mrj', path: 'main.mrj', type: 'file' },
-        { name: 'config.mrj', path: 'config.mrj', type: 'file' },
-      ]);
     }
   };
 
-  // Send message
-  const sendMessage = async () => {
-    if (!inputMessage.trim() || isLoading) return;
+  // Execute agentic task with streaming
+  const executeTask = useCallback(async () => {
+    if (!taskDescription.trim() || isExecuting) return;
 
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: inputMessage,
-      timestamp: new Date()
-    };
-
-    setMessages(prev => [...prev, userMessage]);
-    const currentInput = inputMessage;
-    setInputMessage('');
-    setIsLoading(true);
+    setIsExecuting(true);
+    setSteps([]);
+    setSuccess(null);
+    setIterations(0);
 
     try {
-      const response = await fetch('/api/agent/chat', {
+      const response = await fetch('/api/agent/task', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: currentInput })
+        body: JSON.stringify({
+          description: taskDescription,
+          maxIterations,
+          stream: true
+        })
       });
 
       if (!response.ok) {
         throw new Error(`API error: ${response.status}`);
       }
-      
-      const text = await response.text();
-      let content = 'تم استلام طلبك. كيف يمكنني مساعدتك أكثر؟';
-      
-      if (text) {
-        try {
-          const data = JSON.parse(text);
-          content = data.content || content;
-        } catch {
-          // Use default content
+
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error('No reader available');
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.trim()) continue;
+
+          try {
+            const data = JSON.parse(line);
+
+            if (data.type === 'step') {
+              setSteps(prev => [...prev, {
+                ...data.step,
+                timestamp: new Date(data.step.timestamp)
+              }]);
+            } else if (data.type === 'complete') {
+              setSuccess(data.result.success);
+              setIterations(data.result.iterations);
+              if (data.result.files) {
+                setFiles(data.result.files);
+              }
+            } else if (data.type === 'error') {
+              setSuccess(false);
+              setSteps(prev => [...prev, {
+                id: `error_${Date.now()}`,
+                type: 'error',
+                title: '❌ خطأ في النظام',
+                content: data.error,
+                timestamp: new Date()
+              }]);
+            }
+          } catch {
+            // Skip invalid JSON
+          }
         }
       }
 
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: content,
-        timestamp: new Date()
-      };
+      // Reload files
+      await loadFiles();
 
-      setMessages(prev => [...prev, assistantMessage]);
-
-      // Extract code and update editor
-      const codeMatch = content?.match(/```almarjaa\n([\s\S]*?)```/);
-      if (codeMatch) {
-        setCode(codeMatch[1]);
-      }
-    } catch (error) {
-      console.error('Error sending message:', error);
-      const errorMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: 'أنا هنا للمساعدة! يمكنك طلب كتابة كود، تصحيح أخطاء، أو شرح أي كود بلغة المرجع.',
+    } catch (error: any) {
+      console.error('Task execution error:', error);
+      setSuccess(false);
+      setSteps(prev => [...prev, {
+        id: `error_${Date.now()}`,
+        type: 'error',
+        title: '❌ خطأ في الاتصال',
+        content: error.message,
         timestamp: new Date()
-      };
-      setMessages(prev => [...prev, errorMessage]);
+      }]);
     } finally {
-      setIsLoading(false);
+      setIsExecuting(false);
+    }
+  }, [taskDescription, isExecuting, maxIterations]);
+
+  // Download project as ZIP
+  const downloadProject = async () => {
+    try {
+      const response = await fetch('/api/agent/task?action=download&project=almarjaa-project');
+      if (!response.ok) throw new Error('Download failed');
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'almarjaa-project.zip';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Download error:', error);
+      alert('حدث خطأ في التنزيل');
     }
   };
 
-  // Execute code
-  const executeCode = async () => {
-    setIsLoading(true);
-    setOutput('جاري التنفيذ...');
-
+  // Clear sandbox
+  const clearSandbox = async () => {
+    if (!confirm('هل أنت متأكد من مسح جميع الملفات؟')) return;
+    
     try {
-      const response = await fetch('/api/agent/execute', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code })
-      });
-
-      if (!response.ok) {
-        throw new Error(`API error: ${response.status}`);
-      }
-      
-      const text = await response.text();
-      if (text) {
-        try {
-          const data = JSON.parse(text);
-          setOutput(data.output || 'تم التنفيذ بنجاح');
-        } catch {
-          setOutput(text);
-        }
-      } else {
-        setOutput('تم التنفيذ بنجاح');
-      }
+      await fetch('/api/agent/task', { method: 'DELETE' });
+      setFiles([]);
+      setSelectedFile(null);
+      setSteps([]);
+      setSuccess(null);
     } catch (error) {
-      console.error('Error executing code:', error);
-      // Simulate execution for demo
-      const lines = code.split('\n');
-      let result = '';
-      for (const line of lines) {
-        const printMatch = line.match(/اطبع\s*\(\s*["'](.+?)["']\s*\)/);
-        if (printMatch) {
-          result += printMatch[1] + '\n';
-        }
-      }
-      setOutput(result || '✓ تم تنفيذ الكود بنجاح');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Execute terminal command
-  const executeTerminalCommand = async () => {
-    if (!terminalInput.trim()) return;
-
-    const command = terminalInput;
-    setTerminalHistory(prev => [...prev, `$ ${command}`]);
-    setTerminalInput('');
-
-    try {
-      const response = await fetch('/api/agent/execute', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ command })
-      });
-
-      if (!response.ok) {
-        setTerminalHistory(prev => [...prev, `Error: ${response.status}`]);
-        return;
-      }
-      
-      const text = await response.text();
-      if (text) {
-        try {
-          const data = JSON.parse(text);
-          setTerminalHistory(prev => [...prev, data.output || 'تم التنفيذ']);
-        } catch {
-          setTerminalHistory(prev => [...prev, text]);
-        }
-      }
-    } catch (error) {
-      setTerminalHistory(prev => [...prev, `> ${command}`]);
-      setTerminalHistory(prev => [...prev, 'Command executed (simulation mode)']);
+      console.error('Clear error:', error);
     }
   };
 
@@ -375,191 +352,8 @@ export default function AlMarjaaAgentPage() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // Save file
-  const saveFile = async () => {
-    if (!selectedFile) {
-      alert('يرجى اختيار ملف أولاً');
-      return;
-    }
-    
-    try {
-      const response = await fetch('/api/files', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'update',
-          path: selectedFile,
-          content: code
-        })
-      });
-      const data = await response.json();
-      if (data.success) {
-        setOutput('✓ تم حفظ الملف بنجاح');
-      }
-    } catch (error) {
-      console.error('Error saving file:', error);
-      setOutput('✓ تم الحفظ محلياً');
-    }
-  };
-
-  // Create new file
-  const createNewFile = async () => {
-    const name = prompt('أدخل اسم الملف (مثال: newfile.mrj):');
-    if (!name) return;
-
-    try {
-      await fetch('/api/files', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'create',
-          path: name,
-          content: '// ملف جديد\n'
-        })
-      });
-      loadFiles();
-    } catch (error) {
-      console.error('Error creating file:', error);
-      setFiles(prev => [...prev, { name, path: name, type: 'file' }]);
-    }
-  };
-
-  // Create new project
-  const createNewProject = async () => {
-    if (!newProjectName.trim()) {
-      alert('يرجى إدخال اسم المشروع');
-      return;
-    }
-
-    try {
-      const response = await fetch('/api/projects', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: newProjectName,
-          type: newProjectType
-        })
-      });
-      const data = await response.json();
-      if (data.success) {
-        loadFiles();
-        setNewProjectOpen(false);
-        setNewProjectName('');
-        alert(`تم إنشاء المشروع "${newProjectName}" بنجاح!`);
-      }
-    } catch (error) {
-      console.error('Error creating project:', error);
-      alert('تم إنشاء المشروع محلياً');
-      setNewProjectOpen(false);
-    }
-  };
-
-  // Export project as ZIP
-  const exportProject = async (projectName?: string) => {
-    try {
-      const url = projectName 
-        ? `/api/export?project=${projectName}`
-        : '/api/export';
-      
-      const response = await fetch(url);
-      
-      if (!response.ok) {
-        throw new Error('فشل في التصدير');
-      }
-      
-      const blob = await response.blob();
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = downloadUrl;
-      a.download = projectName ? `${projectName}.zip` : 'almarjaa-project.zip';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(downloadUrl);
-      
-      setOutput('✓ تم تصدير المشروع بنجاح');
-    } catch (error) {
-      console.error('Export error:', error);
-      alert('حدث خطأ في التصدير. يرجى المحاولة مرة أخرى.');
-    }
-  };
-
-  // Delete file
-  const deleteFile = async (filePath: string) => {
-    if (!confirm(`هل أنت متأكد من حذف "${filePath}"؟`)) return;
-
-    try {
-      await fetch(`/api/files?path=${filePath}`, {
-        method: 'DELETE'
-      });
-      loadFiles();
-      if (selectedFile === filePath) {
-        setSelectedFile(null);
-      }
-    } catch (error) {
-      console.error('Error deleting file:', error);
-      setFiles(prev => prev.filter(f => f.path !== filePath));
-    }
-  };
-
-  // Load file content
-  const loadFileContent = async (filePath: string) => {
-    try {
-      const response = await fetch(`/api/files?path=${filePath}`);
-      const data = await response.json();
-      if (data.success) {
-        setCode(data.content);
-        setActiveTab('code');
-      }
-    } catch (error) {
-      console.error('Error loading file:', error);
-      setCode(`// ${filePath}\n// محتوى الملف\nاطبع("مرحباً من ${filePath}")؛`);
-      setActiveTab('code');
-    }
-  };
-
-  // Render message with code blocks
-  const renderMessage = (message: Message) => {
-    const parts = message.content.split(/(```[\s\S]*?```)/g);
-
-    return parts.map((part, index) => {
-      if (part.startsWith('```')) {
-        const langMatch = part.match(/```(\w+)?\n?/);
-        const language = langMatch?.[1] || 'almarjaa';
-        const codeContent = part.replace(/```\w*\n?|```/g, '').trim();
-
-        return (
-          <div key={index} className="my-2 rounded-lg bg-slate-900/80 border border-slate-700/50 overflow-hidden">
-            <div className="flex items-center justify-between px-3 py-1.5 bg-slate-800/50 border-b border-slate-700/50">
-              <Badge variant="outline" className="text-xs bg-emerald-600/20 text-emerald-400 border-emerald-500/30">{language}</Badge>
-              <div className="flex gap-1">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 px-2 text-xs hover:bg-slate-700"
-                  onClick={() => copyToClipboard(codeContent)}
-                >
-                  {copied ? <Check className="h-3 w-3 text-green-400" /> : <Copy className="h-3 w-3" />}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 px-2 text-xs hover:bg-slate-700"
-                  onClick={() => { setCode(codeContent); setActiveTab('code'); }}
-                >
-                  <Code className="h-3 w-3" />
-                </Button>
-              </div>
-            </div>
-            <pre className="p-3 text-sm text-emerald-300 font-mono overflow-x-auto" dir="ltr">
-              {codeContent}
-            </pre>
-          </div>
-        );
-      }
-      return <span key={index} className="whitespace-pre-wrap">{part}</span>;
-    });
-  };
+  // Get selected file content
+  const selectedFileContent = files.find(f => f.path === selectedFile)?.content || '';
 
   return (
     <div className="h-screen flex flex-col bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-slate-100 overflow-hidden">
@@ -582,6 +376,7 @@ export default function AlMarjaaAgentPage() {
               <h1 className="text-lg font-bold bg-gradient-to-l from-emerald-400 via-teal-300 to-cyan-400 bg-clip-text text-transparent">
                 وكيل المرجع الذكي
               </h1>
+              <p className="text-xs text-slate-400">نظام Agentic متكامل</p>
             </div>
           </div>
           <Badge variant="outline" className="text-emerald-400 border-emerald-500/30 text-xs bg-emerald-500/10">
@@ -594,31 +389,20 @@ export default function AlMarjaaAgentPage() {
             variant="ghost" 
             size="sm" 
             className="gap-2 text-slate-400 hover:text-slate-100 hover:bg-slate-800/80"
-            onClick={() => setNewProjectOpen(true)}
+            onClick={downloadProject}
+            disabled={files.length === 0}
           >
-            <FolderPlus className="h-4 w-4" />
-            مشروع جديد
+            <Download className="h-4 w-4" />
+            تنزيل ZIP
           </Button>
           <Button 
             variant="ghost" 
             size="sm" 
-            className="gap-2 text-slate-400 hover:text-slate-100 hover:bg-slate-800/80"
-            onClick={() => exportProject()}
+            className="gap-2 text-red-400 hover:text-red-300 hover:bg-red-500/10"
+            onClick={clearSandbox}
           >
-            <Download className="h-4 w-4" />
-            تصدير ZIP
-          </Button>
-          <Button variant="ghost" size="sm" className="gap-2 text-slate-400 hover:text-slate-100">
-            <GitBranch className="h-4 w-4" />
-            main
-          </Button>
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            className="hover:bg-slate-800/80"
-            onClick={() => setSettingsOpen(true)}
-          >
-            <SettingsIcon className="h-5 w-5" />
+            <Trash2 className="h-4 w-4" />
+            مسح
           </Button>
         </div>
       </header>
@@ -634,36 +418,26 @@ export default function AlMarjaaAgentPage() {
                 <div className="h-full flex flex-col border-l border-slate-800/50">
                   {/* Sidebar Header */}
                   <div className="flex items-center justify-between px-3 py-2 border-b border-slate-800/50 shrink-0 bg-slate-800/30">
-                    <span className="text-sm font-medium text-slate-300">المستكشف</span>
-                    <div className="flex gap-1">
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        className="h-7 w-7 hover:bg-emerald-600/20 hover:text-emerald-400" 
-                        onClick={createNewFile}
-                        title="إنشاء ملف جديد"
-                      >
-                        <Plus className="h-4 w-4" />
-                      </Button>
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        className="h-7 w-7 hover:bg-emerald-600/20 hover:text-emerald-400" 
-                        onClick={loadFiles}
-                        title="تحديث"
-                      >
-                        <RefreshCw className="h-4 w-4" />
-                      </Button>
-                    </div>
+                    <span className="text-sm font-medium text-slate-300">الملفات</span>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-7 w-7 hover:bg-emerald-600/20 hover:text-emerald-400" 
+                      onClick={loadFiles}
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                    </Button>
                   </div>
 
                   {/* File List */}
                   <ScrollArea className="flex-1">
                     <div className="p-2">
-                      <div className="flex items-center gap-2 px-2 py-1.5 text-slate-300 cursor-pointer hover:bg-slate-800/50 rounded-md">
-                        <ChevronDown className="h-4 w-4 text-slate-500" />
+                      <div className="flex items-center gap-2 px-2 py-1.5 text-slate-300">
                         <Folder className="h-4 w-4 text-amber-400" />
                         <span className="text-sm font-medium">sandbox</span>
+                        <Badge variant="outline" className="text-[10px] ml-auto">
+                          {files.length}
+                        </Badge>
                       </div>
                       <div className="mr-4 mt-1">
                         {files.map((file, index) => (
@@ -677,29 +451,23 @@ export default function AlMarjaaAgentPage() {
                             )}
                             onClick={() => {
                               setSelectedFile(file.path);
-                              if (file.type === 'file') {
-                                loadFileContent(file.path);
-                              }
+                              setActiveTab('code');
                             }}
                           >
                             <div className="flex items-center gap-2">
-                              {file.type === 'directory' ? (
-                                <Folder className="h-4 w-4 text-amber-400" />
-                              ) : (
-                                <FileCode className="h-4 w-4 text-emerald-400" />
-                              )}
-                              <span className="text-sm truncate">{file.name}</span>
+                              <FileCode className="h-4 w-4 text-emerald-400" />
+                              <span className="text-sm truncate">{file.path}</span>
                             </div>
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-5 w-5 opacity-0 group-hover:opacity-100 hover:bg-red-600/20 hover:text-red-400"
+                              className="h-5 w-5 opacity-0 group-hover:opacity-100 hover:bg-slate-700"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                deleteFile(file.path);
+                                copyToClipboard(file.content);
                               }}
                             >
-                              <Trash2 className="h-3 w-3" />
+                              <Copy className="h-3 w-3" />
                             </Button>
                           </div>
                         ))}
@@ -708,25 +476,12 @@ export default function AlMarjaaAgentPage() {
                             <Folder className="h-10 w-10 mx-auto mb-2 opacity-30" />
                             لا توجد ملفات
                             <br />
-                            <span className="text-xs">انقر + للإنشاء</span>
+                            <span className="text-xs">أنشئ مشروعاً جديداً</span>
                           </div>
                         )}
                       </div>
                     </div>
                   </ScrollArea>
-
-                  {/* Quick Actions */}
-                  <div className="p-2 border-t border-slate-800/50 shrink-0">
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      className="w-full justify-start gap-2 border-dashed border-slate-700 hover:bg-slate-800/50"
-                      onClick={() => setNewProjectOpen(true)}
-                    >
-                      <FolderPlus className="h-4 w-4" />
-                      مشروع جديد
-                    </Button>
-                  </div>
                 </div>
               </ResizablePanel>
               <ResizableHandle className="w-1 bg-slate-800/50 hover:bg-emerald-500/50 transition-colors cursor-col-resize" />
@@ -735,271 +490,170 @@ export default function AlMarjaaAgentPage() {
 
           {/* Main Panel */}
           <ResizablePanel defaultSize={sidebarOpen ? 80 : 100}>
-            <ResizablePanelGroup direction="vertical" className="h-full">
-              
-              {/* Top Section - Chat & Code */}
-              <ResizablePanel defaultSize={65} minSize={30} maxSize={85}>
-                <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
-                  <div className="flex items-center justify-between px-4 py-1.5 border-b border-slate-800/50 bg-slate-800/20 shrink-0">
-                    <TabsList className="bg-transparent gap-2">
-                      <TabsTrigger
-                        value="chat"
-                        className="gap-2 data-[state=active]:bg-emerald-600/20 data-[state=active]:text-emerald-400 rounded-lg"
-                      >
-                        <MessageSquare className="h-4 w-4" />
-                        المحادثة
-                      </TabsTrigger>
-                      <TabsTrigger
-                        value="code"
-                        className="gap-2 data-[state=active]:bg-emerald-600/20 data-[state=active]:text-emerald-400 rounded-lg"
-                      >
-                        <Code className="h-4 w-4" />
-                        الكود
-                      </TabsTrigger>
-                    </TabsList>
-                    <div className="flex gap-2">
-                      {activeTab === 'code' && (
-                        <>
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
-                            onClick={saveFile} 
-                            className="gap-2 border-slate-700 hover:bg-slate-800"
-                          >
-                            <Save className="h-4 w-4" />
-                            حفظ
-                          </Button>
-                          <Button
-                            size="sm"
-                            onClick={executeCode}
-                            disabled={isLoading}
-                            className="gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 shadow-lg shadow-emerald-500/20"
-                          >
-                            {isLoading ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <Play className="h-4 w-4" />
-                            )}
-                            تنفيذ
-                          </Button>
-                        </>
-                      )}
-                    </div>
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
+              <div className="flex items-center justify-between px-4 py-1.5 border-b border-slate-800/50 bg-slate-800/20 shrink-0">
+                <TabsList className="bg-transparent gap-2">
+                  <TabsTrigger
+                    value="agent"
+                    className="gap-2 data-[state=active]:bg-emerald-600/20 data-[state=active]:text-emerald-400 rounded-lg"
+                  >
+                    <Rocket className="h-4 w-4" />
+                    الوكيل
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="code"
+                    className="gap-2 data-[state=active]:bg-emerald-600/20 data-[state=active]:text-emerald-400 rounded-lg"
+                  >
+                    <Code className="h-4 w-4" />
+                    الكود
+                  </TabsTrigger>
+                </TabsList>
+                
+                {/* Progress indicator */}
+                {isExecuting && (
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin text-emerald-400" />
+                    <span className="text-sm text-slate-400">
+                      المحاولة {iterations}/{maxIterations}
+                    </span>
+                    <Progress value={(iterations / maxIterations) * 100} className="w-24 h-1.5" />
                   </div>
+                )}
+                
+                {success === true && (
+                  <Badge className="bg-green-500/20 text-green-400 border-green-500/30">
+                    <CheckCircle className="h-3 w-3 ml-1" />
+                    تم بنجاح
+                  </Badge>
+                )}
+                {success === false && (
+                  <Badge className="bg-red-500/20 text-red-400 border-red-500/30">
+                    <XCircle className="h-3 w-3 ml-1" />
+                    فشل
+                  </Badge>
+                )}
+              </div>
 
-                  {/* Chat Tab */}
-                  <TabsContent value="chat" className="flex-1 m-0 overflow-hidden data-[state=inactive]:hidden">
-                    <div className="h-full flex flex-col">
-                      {/* Messages */}
-                      <ScrollArea className="flex-1 p-4">
-                        {messages.length === 0 ? (
-                          <div className="flex flex-col items-center justify-center h-full text-center py-8">
-                            <div className="w-28 h-28 rounded-3xl bg-gradient-to-br from-emerald-500/20 via-teal-500/20 to-cyan-500/20 flex items-center justify-center mb-6 shadow-2xl shadow-emerald-500/10 border border-emerald-500/10">
-                              <Sparkles className="h-14 w-14 text-emerald-400" />
-                            </div>
-                            <h3 className="text-2xl font-bold mb-3 bg-gradient-to-l from-emerald-400 to-teal-300 bg-clip-text text-transparent">
-                              مرحباً بك في وكيل المرجع!
-                            </h3>
-                            <p className="text-slate-400 max-w-lg mb-8 leading-relaxed">
-                              أنا وكيل ذكي متخصص في لغة المرجع البرمجية العربية. يمكنني مساعدتك في كتابة وتصحيح وتشغيل الكود.
-                            </p>
-                            <div className="grid grid-cols-2 gap-3 max-w-md">
-                              {[
-                                { icon: Code, text: 'كتابة كود جديد' },
-                                { icon: Zap, text: 'تصحيح الأخطاء' },
-                                { icon: Info, text: 'شرح الكود' },
-                                { icon: FolderPlus, text: 'إنشاء مشروع' }
-                              ].map(item => (
-                                <Button
-                                  key={item.text}
-                                  variant="outline"
-                                  className="justify-start gap-2 bg-slate-800/30 hover:bg-slate-800/50 border-slate-700/50 h-12"
-                                  onClick={() => setInputMessage(`ساعدني في: ${item.text}`)}
-                                >
-                                  <item.icon className="h-4 w-4 text-emerald-400" />
-                                  {item.text}
-                                </Button>
-                              ))}
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="space-y-4 max-w-3xl mx-auto">
-                            {messages.map(message => (
-                              <div
-                                key={message.id}
-                                className={cn(
-                                  "flex",
-                                  message.role === 'user' ? "justify-start" : "justify-end"
-                                )}
-                              >
-                                <div
-                                  className={cn(
-                                    "max-w-[85%] rounded-2xl px-4 py-3 shadow-lg",
-                                    message.role === 'user'
-                                      ? "bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-emerald-500/20"
-                                      : "bg-slate-800/80 text-slate-100 border border-slate-700/50"
-                                  )}
-                                >
-                                  <div className="text-sm leading-relaxed">
-                                    {renderMessage(message)}
-                                  </div>
-                                  <p className="text-xs opacity-60 mt-2">
-                                    {message.timestamp.toLocaleTimeString('ar-SA')}
-                                  </p>
-                                </div>
-                              </div>
-                            ))}
-                            {isLoading && (
-                              <div className="flex justify-end">
-                                <div className="bg-slate-800/80 rounded-2xl px-4 py-3 border border-slate-700/50">
-                                  <Loader2 className="h-5 w-5 animate-spin text-emerald-400" />
-                                </div>
-                              </div>
-                            )}
-                            <div ref={messagesEndRef} />
-                          </div>
-                        )}
-                      </ScrollArea>
-
-                      {/* Input */}
-                      <div className="p-4 border-t border-slate-800/50 bg-slate-800/20 shrink-0">
-                        <div className="max-w-3xl mx-auto flex gap-3">
-                          <Textarea
-                            value={inputMessage}
-                            onChange={(e) => setInputMessage(e.target.value)}
-                            placeholder="اكتب رسالتك هنا... مثال: اكتب برنامج يحسب مضروب عدد"
-                            className="min-h-[56px] max-h-32 bg-slate-800/50 border-slate-700/50 resize-none text-right placeholder:text-slate-500 focus-visible:ring-emerald-500/50"
-                            dir="rtl"
-                            style={{ fontSize: `${settings.fontSize}px` }}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter' && !e.shiftKey) {
-                                e.preventDefault();
-                                sendMessage();
-                              }
-                            }}
-                          />
-                          <Button
-                            onClick={sendMessage}
-                            disabled={isLoading || !inputMessage.trim()}
-                            className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 h-auto px-5 shrink-0 shadow-lg shadow-emerald-500/20"
-                          >
-                            <Send className="h-5 w-5" />
-                          </Button>
+              {/* Agent Tab */}
+              <TabsContent value="agent" className="flex-1 m-0 overflow-hidden data-[state=inactive]:hidden">
+                <div className="h-full flex flex-col">
+                  {/* Steps */}
+                  <ScrollArea className="flex-1 p-4">
+                    {steps.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center h-full text-center py-8">
+                        <div className="w-28 h-28 rounded-3xl bg-gradient-to-br from-emerald-500/20 via-teal-500/20 to-cyan-500/20 flex items-center justify-center mb-6 shadow-2xl shadow-emerald-500/10 border border-emerald-500/10">
+                          <Sparkles className="h-14 w-14 text-emerald-400" />
+                        </div>
+                        <h3 className="text-2xl font-bold mb-3 bg-gradient-to-l from-emerald-400 to-teal-300 bg-clip-text text-transparent">
+                          مرحباً بك في الوكيل الذكي!
+                        </h3>
+                        <p className="text-slate-400 max-w-lg mb-8 leading-relaxed">
+                          اكتب وصف المشروع وسيقوم الوكيل بإنشاء الملفات وتنفيذها وإصلاح الأخطاء تلقائياً حتى ينجح.
+                        </p>
+                        <div className="grid grid-cols-2 gap-3 max-w-md">
+                          {[
+                            'برنامج حاسبة',
+                            'لعبة تخمين الأرقام',
+                            'نظام إدارة مهام',
+                            'تطبيق قائمة مهام'
+                          ].map(example => (
+                            <Button
+                              key={example}
+                              variant="outline"
+                              className="justify-start gap-2 bg-slate-800/30 hover:bg-slate-800/50 border-slate-700/50 h-12"
+                              onClick={() => setTaskDescription(`أنشئ ${example}`)}
+                            >
+                              <Zap className="h-4 w-4 text-emerald-400" />
+                              {example}
+                            </Button>
+                          ))}
                         </div>
                       </div>
-                    </div>
-                  </TabsContent>
-
-                  {/* Code Tab */}
-                  <TabsContent value="code" className="flex-1 m-0 overflow-hidden data-[state=inactive]:hidden">
-                    <div className="h-full flex">
-                      {/* Editor */}
-                      <div className="flex-1 flex flex-col min-w-0">
-                        <div className="flex-1 p-3">
-                          <Textarea
-                            value={code}
-                            onChange={(e) => setCode(e.target.value)}
-                            className={cn(
-                              "h-full font-mono bg-slate-950/50 border-slate-800/50 resize-none focus-visible:ring-emerald-500/50 text-right",
-                              settings.wordWrap ? "whitespace-pre-wrap" : "whitespace-pre overflow-x-auto"
-                            )}
-                            dir="rtl"
-                            style={{ 
-                              fontSize: `${settings.fontSize}px`,
-                              fontFamily: settings.editorFont
-                            }}
-                            spellCheck={false}
-                            placeholder="// اكتب كود لغة المرجع هنا"
-                          />
-                        </div>
+                    ) : (
+                      <div className="space-y-2 max-w-3xl mx-auto">
+                        {steps.map(step => (
+                          <StepCard key={step.id} step={step} />
+                        ))}
+                        <div ref={stepsEndRef} />
                       </div>
-
-                      {/* Output Panel */}
-                      <div className="w-72 border-r border-slate-800/50 flex flex-col bg-slate-900/30 shrink-0">
-                        <div className="px-3 py-2 border-b border-slate-800/50 flex items-center gap-2 shrink-0 bg-slate-800/20">
-                          <Terminal className="h-4 w-4 text-teal-400" />
-                          <span className="text-sm font-medium">النتيجة</span>
-                        </div>
-                        <ScrollArea className="flex-1 p-3">
-                          <pre className="text-sm font-mono text-emerald-300 whitespace-pre-wrap break-words" dir="ltr">
-                            {output || 'اضغط "تنفيذ" لتشغيل الكود...'}
-                          </pre>
-                        </ScrollArea>
-                      </div>
-                    </div>
-                  </TabsContent>
-                </Tabs>
-              </ResizablePanel>
-
-              <ResizableHandle className="h-1 bg-slate-800/50 hover:bg-emerald-500/50 transition-colors cursor-row-resize" />
-
-              {/* Bottom Section - Terminal */}
-              <ResizablePanel defaultSize={35} minSize={15} maxSize={60}>
-                <div className="h-full flex flex-col bg-slate-950/50">
-                  <div className="flex items-center justify-between px-4 py-1.5 border-b border-slate-800/50 bg-slate-800/20 shrink-0">
-                    <div className="flex items-center gap-2">
-                      <Terminal className="h-4 w-4 text-emerald-400" />
-                      <span className="text-sm font-medium">الطرفية</span>
-                    </div>
-                    <div className="flex gap-1">
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        className="h-6 text-xs text-slate-500 hover:text-red-400 hover:bg-red-500/10"
-                        onClick={() => setTerminalHistory([
-                          '╔══════════════════════════════════════════════════╗',
-                          '║     متحكم الطرفية - لغة المرجع                  ║',
-                          '║     البيئة: sandbox                             ║',
-                          '╚══════════════════════════════════════════════════╝',
-                          ''
-                        ])}
-                      >
-                        <Trash2 className="h-3 w-3 mr-1" />
-                        مسح
-                      </Button>
-                    </div>
-                  </div>
-
-                  {/* Terminal Output */}
-                  <ScrollArea className="flex-1 p-3">
-                    <pre className="text-sm font-mono text-slate-300 whitespace-pre-wrap" dir="ltr" style={{ fontSize: `${settings.terminalFontSize}px` }}>
-                      {terminalHistory.map((line, i) => (
-                        <div key={i} className={line.startsWith('$') || line.startsWith('>') ? 'text-emerald-400' : ''}>
-                          {line}
-                        </div>
-                      ))}
-                      <span className="text-emerald-400">$ </span>
-                    </pre>
+                    )}
                   </ScrollArea>
 
-                  {/* Terminal Input */}
-                  <div className="p-3 border-t border-slate-800/50 shrink-0">
-                    <div className="flex gap-2">
-                      <Input
-                        value={terminalInput}
-                        onChange={(e) => setTerminalInput(e.target.value)}
+                  {/* Input */}
+                  <div className="p-4 border-t border-slate-800/50 bg-slate-800/20 shrink-0">
+                    <div className="max-w-3xl mx-auto flex gap-3">
+                      <Textarea
+                        value={taskDescription}
+                        onChange={(e) => setTaskDescription(e.target.value)}
+                        placeholder="اكتب وصف المشروع... مثال: أنشئ برنامج حاسبة تقوم بالجمع والطرح والضرب والقسمة"
+                        className="min-h-[56px] max-h-32 bg-slate-800/50 border-slate-700/50 resize-none text-right placeholder:text-slate-500 focus-visible:ring-emerald-500/50"
+                        dir="rtl"
                         onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            executeTerminalCommand();
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            executeTask();
                           }
                         }}
-                        placeholder="أدخل الأمر..."
-                        className="bg-slate-900/50 border-slate-800 font-mono focus-visible:ring-emerald-500/50"
-                        dir="ltr"
-                        style={{ fontSize: `${settings.terminalFontSize}px` }}
+                        disabled={isExecuting}
                       />
                       <Button
-                        onClick={executeTerminalCommand}
-                        size="icon"
-                        className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 shrink-0"
+                        onClick={executeTask}
+                        disabled={isExecuting || !taskDescription.trim()}
+                        className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 h-auto px-5 shrink-0 shadow-lg shadow-emerald-500/20"
                       >
-                        <Play className="h-4 w-4" />
+                        {isExecuting ? (
+                          <Loader2 className="h-5 w-5 animate-spin" />
+                        ) : (
+                          <Rocket className="h-5 w-5" />
+                        )}
                       </Button>
                     </div>
                   </div>
                 </div>
-              </ResizablePanel>
-            </ResizablePanelGroup>
+              </TabsContent>
+
+              {/* Code Tab */}
+              <TabsContent value="code" className="flex-1 m-0 overflow-hidden data-[state=inactive]:hidden">
+                <div className="h-full flex flex-col">
+                  {selectedFile ? (
+                    <>
+                      <div className="flex items-center justify-between px-4 py-2 border-b border-slate-800/50 bg-slate-800/20 shrink-0">
+                        <div className="flex items-center gap-2">
+                          <FileCode className="h-4 w-4 text-emerald-400" />
+                          <span className="text-sm font-medium">{selectedFile}</span>
+                          <Badge variant="outline" className="text-xs">
+                            {files.find(f => f.path === selectedFile)?.language}
+                          </Badge>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => copyToClipboard(selectedFileContent)}
+                            className="gap-2"
+                          >
+                            {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                            نسخ
+                          </Button>
+                        </div>
+                      </div>
+                      <ScrollArea className="flex-1">
+                        <pre className="p-4 text-sm font-mono text-emerald-300 whitespace-pre" dir="ltr">
+                          {selectedFileContent}
+                        </pre>
+                      </ScrollArea>
+                    </>
+                  ) : (
+                    <div className="flex-1 flex items-center justify-center text-center text-slate-500">
+                      <div>
+                        <FileCode className="h-16 w-16 mx-auto mb-4 opacity-30" />
+                        <p>اختر ملفاً من القائمة الجانبية</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </TabsContent>
+            </Tabs>
           </ResizablePanel>
         </ResizablePanelGroup>
       </div>
@@ -1008,258 +662,26 @@ export default function AlMarjaaAgentPage() {
       <footer className="flex items-center justify-between px-4 py-1.5 border-t border-slate-800/50 bg-slate-900/80 text-xs text-slate-500 shrink-0">
         <div className="flex items-center gap-4">
           <span className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-lg shadow-emerald-500/50" />
-            متصل
+            <span className={cn(
+              "w-2 h-2 rounded-full shadow-lg",
+              isExecuting ? "bg-yellow-500 animate-pulse shadow-yellow-500/50" : "bg-emerald-500 shadow-emerald-500/50"
+            )} />
+            {isExecuting ? "يعمل..." : "جاهز"}
           </span>
           <span>لغة المرجع v3.4.0</span>
           <span className="text-slate-600">|</span>
           <span>{files.length} ملفات</span>
+          {iterations > 0 && (
+            <>
+              <span className="text-slate-600">|</span>
+              <span>{iterations} محاولات</span>
+            </>
+          )}
         </div>
         <div className="flex items-center gap-4">
-          <span className="text-emerald-400">{settings.aiProvider.toUpperCase()}</span>
-          <span>UTF-8</span>
           <span>© 2026 رضوان دالي حمدوني</span>
         </div>
       </footer>
-
-      {/* Settings Dialog */}
-      <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-        <DialogContent className="max-w-2xl bg-slate-900 border-slate-700 text-slate-100" dir="rtl">
-          <DialogHeader>
-            <DialogTitle className="text-xl flex items-center gap-2">
-              <SettingsIcon className="h-5 w-5 text-emerald-400" />
-              الإعدادات
-            </DialogTitle>
-            <DialogDescription className="text-slate-400">
-              تخصيص تجربتك مع وكيل المرجع الذكي
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-6 py-4">
-            {/* Appearance */}
-            <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-slate-300 flex items-center gap-2">
-                <Sun className="h-4 w-4" />
-                المظهر
-              </h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-slate-400">حجم الخط</Label>
-                  <div className="flex items-center gap-4">
-                    <Slider
-                      value={[settings.fontSize]}
-                      onValueChange={(value) => saveSettings({ fontSize: value[0] })}
-                      min={10}
-                      max={24}
-                      step={1}
-                      className="flex-1"
-                    />
-                    <span className="text-sm text-slate-300 w-8">{settings.fontSize}</span>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-slate-400">حجم خط الطرفية</Label>
-                  <div className="flex items-center gap-4">
-                    <Slider
-                      value={[settings.terminalFontSize]}
-                      onValueChange={(value) => saveSettings({ terminalFontSize: value[0] })}
-                      min={10}
-                      max={20}
-                      step={1}
-                      className="flex-1"
-                    />
-                    <span className="text-sm text-slate-300 w-8">{settings.terminalFontSize}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Editor */}
-            <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-slate-300 flex items-center gap-2">
-                <Type className="h-4 w-4" />
-                المحرر
-              </h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex items-center justify-between">
-                  <Label className="text-slate-400">التفاف النص</Label>
-                  <Switch
-                    checked={settings.wordWrap}
-                    onCheckedChange={(checked) => saveSettings({ wordWrap: checked })}
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <Label className="text-slate-400">الحفظ التلقائي</Label>
-                  <Switch
-                    checked={settings.autoSave}
-                    onCheckedChange={(checked) => saveSettings({ autoSave: checked })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-slate-400">حجم Tab</Label>
-                  <Select
-                    value={settings.tabSize.toString()}
-                    onValueChange={(value) => saveSettings({ tabSize: parseInt(value) })}
-                  >
-                    <SelectTrigger className="bg-slate-800 border-slate-700">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="2">2 مسافات</SelectItem>
-                      <SelectItem value="4">4 مسافات</SelectItem>
-                      <SelectItem value="8">8 مسافات</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-slate-400">نوع الخط</Label>
-                  <Select
-                    value={settings.editorFont}
-                    onValueChange={(value) => saveSettings({ editorFont: value })}
-                  >
-                    <SelectTrigger className="bg-slate-800 border-slate-700">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="monospace">Monospace</SelectItem>
-                      <SelectItem value="'Fira Code'">Fira Code</SelectItem>
-                      <SelectItem value="'JetBrains Mono'">JetBrains Mono</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </div>
-
-            {/* AI */}
-            <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-slate-300 flex items-center gap-2">
-                <Cpu className="h-4 w-4" />
-                الذكاء الاصطناعي
-              </h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-slate-400">مزود AI</Label>
-                  <Select
-                    value={settings.aiProvider}
-                    onValueChange={(value) => saveSettings({ aiProvider: value })}
-                  >
-                    <SelectTrigger className="bg-slate-800 border-slate-700">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="zai">Z-AI (افتراضي)</SelectItem>
-                      <SelectItem value="openrouter">OpenRouter</SelectItem>
-                      <SelectItem value="gemini">Google Gemini</SelectItem>
-                      <SelectItem value="groq">Groq</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </div>
-
-            {/* Other */}
-            <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-slate-300 flex items-center gap-2">
-                <Shield className="h-4 w-4" />
-                أخرى
-              </h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex items-center justify-between">
-                  <Label className="text-slate-400">الإشعارات</Label>
-                  <Switch
-                    checked={settings.notifications}
-                    onCheckedChange={(checked) => saveSettings({ notifications: checked })}
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <Label className="text-slate-400">المؤثرات الصوتية</Label>
-                  <Switch
-                    checked={settings.soundEffects}
-                    onCheckedChange={(checked) => saveSettings({ soundEffects: checked })}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button 
-              variant="outline" 
-              onClick={async () => {
-                await saveSettings(DEFAULT_SETTINGS);
-                setSettingsOpen(false);
-              }}
-              className="gap-2"
-            >
-              <RefreshCw className="h-4 w-4" />
-              إعادة تعيين
-            </Button>
-            <Button 
-              onClick={() => setSettingsOpen(false)}
-              className="bg-emerald-600 hover:bg-emerald-700"
-            >
-              حفظ
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* New Project Dialog */}
-      <Dialog open={newProjectOpen} onOpenChange={setNewProjectOpen}>
-        <DialogContent className="bg-slate-900 border-slate-700 text-slate-100" dir="rtl">
-          <DialogHeader>
-            <DialogTitle className="text-xl flex items-center gap-2">
-              <FolderPlus className="h-5 w-5 text-emerald-400" />
-              مشروع جديد
-            </DialogTitle>
-            <DialogDescription className="text-slate-400">
-              إنشاء مشروع جديد بلغة المرجع
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label className="text-slate-300">اسم المشروع</Label>
-              <Input
-                value={newProjectName}
-                onChange={(e) => setNewProjectName(e.target.value)}
-                placeholder="أدخل اسم المشروع"
-                className="bg-slate-800 border-slate-700"
-                dir="rtl"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label className="text-slate-300">نوع المشروع</Label>
-              <Select value={newProjectType} onValueChange={setNewProjectType}>
-                <SelectTrigger className="bg-slate-800 border-slate-700">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="console">تطبيق طرفية</SelectItem>
-                  <SelectItem value="web">تطبيق ويب</SelectItem>
-                  <SelectItem value="api">خادم API</SelectItem>
-                  <SelectItem value="cli">أداة سطر أوامر</SelectItem>
-                  <SelectItem value="neural">شبكة عصبية</SelectItem>
-                  <SelectItem value="data">معالجة بيانات</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setNewProjectOpen(false)}>
-              إلغاء
-            </Button>
-            <Button 
-              onClick={createNewProject}
-              className="bg-emerald-600 hover:bg-emerald-700 gap-2"
-            >
-              <FolderPlus className="h-4 w-4" />
-              إنشاء
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

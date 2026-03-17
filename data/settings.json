@@ -1,0 +1,17 @@
+{
+  "theme": "dark",
+  "language": "ar",
+  "fontSize": 14,
+  "autoSave": true,
+  "autoSaveDelay": 1000,
+  "showLineNumbers": true,
+  "wordWrap": true,
+  "tabSize": 4,
+  "aiProvider": "groq",
+  "aiModel": "default",
+  "terminalFontSize": 13,
+  "editorFont": "monospace",
+  "rtl": true,
+  "notifications": true,
+  "soundEffects": false
+}
